@@ -1,0 +1,366 @@
+/* =========================
+   Estilos base del layout
+   ========================= */
+
+.admin-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.admin-main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+/* =========================
+   Barra superior (header)
+   ========================= */
+
+/* Fondo, borde y z-index del header */
+header.bg-white.border-b.border-gray-200 {
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  position: sticky;      /* se queda arriba al hacer scroll */
+  top: 0;
+  z-index: 50;           /* por encima del contenido */
+}
+
+/* Hacemos la barra un poco más bajita y compacta */
+header.bg-white.border-b.border-gray-200
+  > div.max-w-7xl.mx-auto.px-3
+  > div.flex.justify-between.items-center.h-10 {
+  height: 42px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* =========================
+   Lado izquierdo:
+   [MS] MiningSoft | Panel de Control
+   ========================= */
+
+/* Grupo de la izquierda del header */
+header.bg-white.border-b.border-gray-200
+  > div.max-w-7xl.mx-auto.px-3
+  > div.flex.justify-between.items-center.h-10
+  > div.flex.items-center.space-x-2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #111827;
+}
+
+/* Cuadro azul con "MS" */
+header.bg-white.border-b.border-gray-200
+  > div.max-w-7xl.mx-auto.px-3
+  > div.flex.justify-between.items-center.h-10
+  > div.flex.items-center.space-x-2::before {
+  content: "MS";
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.35);
+}
+
+/* Texto "MiningSoft" */
+header.bg-white.border-b.border-gray-200
+  > div.max-w-7xl.mx-auto.px-3
+  > div.flex.justify-between.items-center.h-10
+  > div.flex.items-center.space-x-2
+  span.text-sm.font-medium.text-gray-900 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 4px;
+}
+
+/* Texto "| Panel de Control" */
+header.bg-white.border-b.border-gray-200
+  > div.max-w-7xl.mx-auto.px-3
+  > div.flex.justify-between.items-center.h-10
+  > div.flex.items-center.space-x-2::after {
+  content: "| Panel de Control";
+  font-size: 13px;
+  color: #4b5563;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+/* =========================
+   Lado derecho:
+   Botón de usuario (HY ▼)
+   ========================= */
+
+/* Botón del avatar */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > button {
+  border-radius: 9999px;
+  padding: 4px 6px;
+  transition: background-color 0.15s ease;
+}
+
+header.bg-white.border-b.border-gray-200
+  .relative
+  > button:hover {
+  background-color: #f3f4f6;
+}
+
+/* Avatar pequeño y redondo */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > button
+  > div.w-6.h-6 {
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+}
+
+/* =========================
+   Dropdown (menú del usuario)
+   ========================= */
+
+/* Contenedor principal del dropdown */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48 {
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15);
+  border: 1px solid #f1f5f9;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  width: 320px !important;
+  z-index: 9999 !important; /* encima de las tarjetas moradas */
+}
+
+/* Cabecera del dropdown */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100 {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 20px !important;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* Avatar grande dentro del dropdown */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100
+  > div.flex.items-center.space-x-2
+  > div.w-6.h-6 {
+  width: 48px !important;
+  height: 48px !important;
+  background: linear-gradient(135deg, #3b82f6, #6366f1) !important;
+  border-radius: 12px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* Contenedor de nombre + correo */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100
+  > div.flex.items-center.space-x-2
+  > div.flex-1.min-w-0 {
+  margin-left: 12px;
+}
+
+/* Nombre del usuario */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100
+  > div.flex.items-center.space-x-2
+  > div.flex-1.min-w-0
+  > p.text-xs.font-medium.text-gray-900 {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: #1f2937 !important;
+  margin-bottom: 4px;
+}
+
+/* Correo del usuario */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100
+  > div.flex.items-center.space-x-2
+  > div.flex-1.min-w-0
+  > p.text-xs.text-gray-500 {
+  font-size: 14px !important;
+  color: #6b7280 !important;
+  margin-bottom: 12px;
+}
+
+/* Badge "Admin" */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100
+  > div.flex.items-center.justify-between.mt-1
+  > span.px-1\.5.py-0\.5 {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important;
+  color: white !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  padding: 6px 12px !important;
+  border-radius: 20px !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* Contenedor del estado "Online" */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100
+  > div.flex.items-center.justify-between.mt-1
+  > div.flex.items-center.space-x-1 {
+  align-items: center;
+}
+
+/* Puntico verde animado */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.px-3.py-2.border-b.border-gray-100
+  > div.flex.items-center.justify-between.mt-1
+  > div.flex.items-center.space-x-1
+  > div.w-1\.5.h-1\.5 {
+  width: 10px !important;
+  height: 10px !important;
+  background: #10b981 !important;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+/* Animación del puntico */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Opciones del menú (Perfil / Configuración) */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.py-1
+  > button {
+  padding: 16px 20px !important;
+  transition: all 0.2s ease;
+  border-radius: 0;
+}
+
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.py-1
+  > button:hover {
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe) !important;
+  transform: translateX(4px);
+}
+
+/* Iconos en las opciones */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.py-1
+  > button
+  > svg.w-3.h-3 {
+  width: 18px !important;
+  height: 18px !important;
+  color: #3b82f6 !important;
+}
+
+/* Texto de las opciones */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.py-1
+  > button
+  > span {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  color: #374151 !important;
+}
+
+/* Sección de "Cerrar sesión" */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.border-t.border-gray-100.pt-1 {
+  border-top: 1px solid #f1f5f9 !important;
+  padding: 16px !important;
+  background: #fafafa;
+}
+
+/* Botón de "Cerrar sesión" */
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.border-t.border-gray-100.pt-1
+  > button {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+  color: white !important;
+  padding: 2px 10px !important;
+  border-radius: 8px !important;
+  font-weight: 200 !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+header.bg-white.border-b.border-gray-200
+  .relative
+  > div.absolute.right-0.mt-1.w-48
+  > div.border-t.border-gray-100.pt-1
+  > button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+/* =========================
+   Responsive
+   ========================= */
+
+@media (max-width: 768px) {
+  /* Ocultamos "| Panel de Control" en pantallas pequeñas */
+  header.bg-white.border-b.border-gray-200
+    > div.max-w-7xl.mx-auto.px-3
+    > div.flex.justify-between.items-center.h-10
+    > div.flex.items-center.space-x-2::after {
+    content: "";
+  }
+
+  header.bg-white.border-b.border-gray-200
+    > div.max-w-7xl.mx-auto.px-3
+    > div.flex.justify-between.items-center.h-10 {
+    height: 38px;
+  }
+
+  /* Dropdown un poco más angosto en móvil */
+  header.bg-white.border-b.border-gray-200
+    .relative
+    > div.absolute.right-0.mt-1.w-48 {
+    width: 280px !important;
+    right: -10px;
+  }
+}
