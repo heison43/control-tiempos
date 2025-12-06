@@ -14,6 +14,8 @@ import WeeklyAssignments from '../admin/WeeklyAssignments';
 import ManageBasicData from "../admin/ManageBasicData";
 import ManageAssignments from "../admin/ManageAssignments";
 import HistorialPage from '../historial/page';
+import ManageAdmins from "../admin/ManageAdmins";
+
 
 export default function AdminPanel() {
   const [operators, setOperators] = useState([]);
@@ -740,6 +742,9 @@ export default function AdminPanel() {
 
       case 'catalogos':
         return <ManageBasicData />;
+        
+      case 'admins':          // 👈 NUEVO
+        return <ManageAdmins />;
 
       case 'historial':
         return (
@@ -805,6 +810,7 @@ export default function AdminPanel() {
             { id: 'gestion', label: '📋 Gestionar Asignaciones' },
             { id: 'equipos', label: '🚜 Asignación de Equipos' },
             { id: 'catalogos', label: '👥 Crear Operadores/Equipos' },
+            { id: 'admins', label: '🛡️ Administradores' }, // 👈 NUEVO
             { id: 'historial', label: '📊 Historial' },
           ].map(tab => (
             <button

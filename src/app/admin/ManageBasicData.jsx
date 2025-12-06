@@ -11,7 +11,6 @@ import {
   onSnapshot
 } from "firebase/firestore";
 
-// Heroicons
 import {
   Cog6ToothIcon,
   PlusIcon,
@@ -27,10 +26,12 @@ export default function ManageBasicData() {
   const [operators, setOperators] = useState([]);
   const [equipment, setEquipment] = useState([]);
 
-  // Crear
+  // Crear operador
   const [opName, setOpName] = useState("");
   const [opCode, setOpCode] = useState("");
+  const [opEmail, setOpEmail] = useState(""); // 👈 NUEVO
 
+  // Crear equipo
   const [eqName, setEqName] = useState("");
   const [eqCode, setEqCode] = useState("");
 
@@ -38,6 +39,7 @@ export default function ManageBasicData() {
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState("");
   const [editCode, setEditCode] = useState("");
+  const [editEmail, setEditEmail] = useState(""); // 👈 NUEVO
 
   useEffect(() => {
     const unsubOps = onSnapshot(collection(db, "operators"), (snap) =>
@@ -57,12 +59,16 @@ export default function ManageBasicData() {
   // Crear operador
   const createOperator = async () => {
     if (!opName.trim()) return alert("Ingresa un nombre");
+
     await addDoc(collection(db, "operators"), {
       name: opName.trim(),
       codigo: opCode.trim(),
+      authEmail: opEmail.trim() ? opEmail.trim().toLowerCase() : null, // 👈 NUEVO
     });
+
     setOpName("");
     setOpCode("");
+    setOpEmail(""); // 👈 limpiar
   };
 
   // Crear equipo
@@ -76,7 +82,7 @@ export default function ManageBasicData() {
     setEqCode("");
   };
 
-  // Eliminar (Confirmación PRO)
+  // Eliminar
   const deleteItem = async (id, type) => {
     const txt =
       type === "op"
@@ -93,13 +99,32 @@ export default function ManageBasicData() {
     setEditing({ ...item, type });
     setEditName(item.name);
     setEditCode(item.codigo || "");
+    setEditEmail(item.authEmail || ""); // 👈 NUEVO
   };
 
   // Guardar edición
   const saveEdit = async () => {
-    const ref = doc(db, editing.type === "op" ? "operators" : "equipment", editing.id);
-    await updateDoc(ref, { name: editName.trim(), codigo: editCode.trim() });
+    const ref = doc(
+      db,
+      editing.type === "op" ? "operators" : "equipment",
+      editing.id
+    );
 
+    const payload =
+      editing.type === "op"
+        ? {
+            name: editName.trim(),
+            codigo: editCode.trim(),
+            authEmail: editEmail.trim()
+              ? editEmail.trim().toLowerCase()
+              : null,
+          }
+        : {
+            name: editName.trim(),
+            codigo: editCode.trim(),
+          };
+
+    await updateDoc(ref, payload);
     setEditing(null);
   };
 
@@ -111,13 +136,14 @@ export default function ManageBasicData() {
         Configuración avanzada
       </button>
 
-      {/* MODAL */}
       {open && (
         <div style={overlay}>
           <div style={modal}>
             {/* Header */}
             <div style={modalHeader}>
-              <h2 style={{ fontSize: 20, fontWeight: 700 }}>Panel de configuración</h2>
+              <h2 style={{ fontSize: 20, fontWeight: 700 }}>
+                Panel de configuración
+              </h2>
               <XMarkIcon
                 onClick={() => setOpen(false)}
                 style={{ width: 28, cursor: "pointer" }}
@@ -160,32 +186,49 @@ export default function ManageBasicData() {
                       onChange={(e) => setOpCode(e.target.value)}
                       style={input}
                     />
+                    <input
+                      placeholder="Correo de acceso"
+                      value={opEmail}
+                      onChange={(e) => setOpEmail(e.target.value)}
+                      style={input}
+                    />
                     <button style={btnAdd} onClick={createOperator}>
                       <PlusIcon style={{ width: 20 }} />
                     </button>
                   </div>
 
                   {/* Lista */}
-                  {operators.map((op) => (
-                    <div key={op.id} style={item}>
-                      <div>{op.name} {op.codigo && `(${op.codigo})`}</div>
+                  <div style={listContainer}> {/* ⭐ NUEVO CONTENEDOR SCROLL */}
+                    {operators.map((op) => (
+                      <div key={op.id} style={item}>
+                        <div>
+                          {op.name} {op.codigo && `(${op.codigo})`}
+                          {op.authEmail && (
+                            <div style={{ fontSize: 12, color: "#4b5563" }}>
+                              📧 {op.authEmail}
+                            </div>
+                          )}
+                        </div>
 
-                      <div style={{ display: "flex", gap: 12 }}>
-                        <PencilSquareIcon
-                          style={iconEdit}
-                          onClick={() => enableEdit(op, "op")}
-                        />
-                        <TrashIcon style={iconDelete} onClick={() => deleteItem(op.id, "op")} />
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <PencilSquareIcon
+                            style={iconEdit}
+                            onClick={() => enableEdit(op, "op")}
+                          />
+                          <TrashIcon
+                            style={iconDelete}
+                            onClick={() => deleteItem(op.id, "op")}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </>
               )}
 
               {/* TAB EQUIPOS */}
               {activeTab === "equipment" && (
                 <>
-                  {/* Crear */}
                   <div style={formRow}>
                     <input
                       placeholder="Nombre"
@@ -204,20 +247,26 @@ export default function ManageBasicData() {
                     </button>
                   </div>
 
-                  {/* Lista */}
-                  {equipment.map((eq) => (
-                    <div key={eq.id} style={item}>
-                      <div>{eq.name} {eq.codigo && `(${eq.codigo})`}</div>
+                  <div style={listContainer}> {/* ⭐ MISMO CONTENEDOR */}
+                    {equipment.map((eq) => (
+                      <div key={eq.id} style={item}>
+                        <div>
+                          {eq.name} {eq.codigo && `(${eq.codigo})`}
+                        </div>
 
-                      <div style={{ display: "flex", gap: 12 }}>
-                        <PencilSquareIcon
-                          style={iconEdit}
-                          onClick={() => enableEdit(eq, "equipment")}
-                        />
-                        <TrashIcon style={iconDelete} onClick={() => deleteItem(eq.id, "eq")} />
+                        <div style={{ display: "flex", gap: 12 }}>
+                          <PencilSquareIcon
+                            style={iconEdit}
+                            onClick={() => enableEdit(eq, "equipment")}
+                          />
+                          <TrashIcon
+                            style={iconDelete}
+                            onClick={() => deleteItem(eq.id, "eq")}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </>
               )}
             </div>
@@ -238,6 +287,14 @@ export default function ManageBasicData() {
                     onChange={(e) => setEditCode(e.target.value)}
                     style={input}
                   />
+                  {editing.type === "op" && (
+                    <input
+                      placeholder="Correo de acceso"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      style={input}
+                    />
+                  )}
 
                   <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                     <button style={btnSave} onClick={saveEdit}>
@@ -287,13 +344,17 @@ const overlay = {
 };
 
 const modal = {
-  width: "90%",
-  maxWidth: 600,
+  width: "94%",              // ⭐ un poco más ancho en pantallas chicas
+  maxWidth: 700,             // ⭐ un pelín más grande
+  maxHeight: "90vh",         // ⭐ para evitar que se salga de la pantalla
+  overflow: "hidden",
   background: "#fff",
   padding: 24,
   borderRadius: 16,
   boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
   animation: "fadeIn 0.3s ease",
+  display: "flex",
+  flexDirection: "column",
 };
 
 const modalHeader = {
@@ -325,14 +386,23 @@ const tabActive = {
   color: "#fff",
 };
 
-const formRow = { display: "flex", gap: 10, marginBottom: 12 };
+// ⭐ ahora los inputs pueden saltar a otra línea
+const formRow = {
+  display: "flex",
+  gap: 10,
+  marginBottom: 12,
+  flexWrap: "wrap",
+  alignItems: "stretch",
+};
 
 const input = {
-  flex: 1,
+  flex: "1 1 150px",   // ⭐ base 150px, se adapta al ancho disponible
+  minWidth: 0,
   padding: "10px 14px",
   borderRadius: 8,
   border: "1px solid #d1d5db",
   fontSize: 14,
+  boxSizing: "border-box",
 };
 
 const btnAdd = {
@@ -342,6 +412,8 @@ const btnAdd = {
   borderRadius: 8,
   cursor: "pointer",
   color: "#fff",
+  flex: "0 0 auto",
+  alignSelf: "stretch",
 };
 
 const item = {
@@ -352,6 +424,14 @@ const item = {
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
+};
+
+// ⭐ contenedor scroll para listas largas
+const listContainer = {
+  marginTop: 4,
+  maxHeight: 320,
+  overflowY: "auto",
+  paddingRight: 4,
 };
 
 const iconEdit = {

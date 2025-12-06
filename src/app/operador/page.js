@@ -1,6 +1,8 @@
 'use client'
+
 import { useEffect, useState } from 'react'
-import { db } from '../../firebaseConfig'
+import { useRouter } from 'next/navigation'
+import { auth, db } from '../../firebaseConfig'
 import {
   collection,
   doc,
@@ -10,11 +12,136 @@ import {
   updateDoc,
   serverTimestamp,
   arrayUnion,
+  getDoc,
 } from 'firebase/firestore'
+import { onAuthStateChanged } from 'firebase/auth'
 
-export default function OperatorPanel() {
-  const [operators, setOperators] = useState([])
-  const [selectedOperator, setSelectedOperator] = useState('')
+/**
+ * WRAPPER: verifica que el usuario logueado tenga rol "operator"
+ * y obtiene su operatorId. Si todo está bien, renderiza el panel.
+ */
+export default function OperatorPage() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [operatorId, setOperatorId] = useState(null)
+  const [operatorLabel, setOperatorLabel] = useState('')
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (!user) {
+          // No hay sesión -> volver al login
+          router.push('/')
+          return
+        }
+
+        const userRef = doc(db, 'users', user.email)
+        const snap = await getDoc(userRef)
+
+        if (!snap.exists()) {
+          console.warn('Usuario en auth pero no en colección users')
+          router.push('/')
+          return
+        }
+
+        const data = snap.data()
+
+        if (data.isActive === false || data.role !== 'operator') {
+          console.warn('Usuario sin rol de operador o inactivo')
+          router.push('/')
+          return
+        }
+
+        if (!data.operatorId) {
+          console.warn('Usuario operator sin operatorId configurado')
+          setOperatorId(null)
+          setOperatorLabel('')
+          setLoading(false)
+          return
+        }
+
+        setOperatorId(data.operatorId)
+
+        // Traer nombre/código del operador para mostrarlo en la cabecera
+        try {
+          const opSnap = await getDoc(doc(db, 'operators', data.operatorId))
+          if (opSnap.exists()) {
+            const op = opSnap.data()
+            const label = `${op.name || 'Operador'}${
+              op.codigo ? ` (${op.codigo})` : ''
+            }`
+            setOperatorLabel(label)
+          }
+        } catch (err) {
+          console.error('Error leyendo operador vinculado:', err)
+        }
+
+        setLoading(false)
+      } catch (err) {
+        console.error('Error verificando permisos de operador:', err)
+        router.push('/')
+      }
+    })
+
+    return () => unsubscribe()
+  }, [router])
+
+  if (loading) {
+    return (
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        }}
+      >
+        <p style={{ fontSize: '1.1rem' }}>Verificando permisos de operador...</p>
+      </main>
+    )
+  }
+
+  if (!operatorId) {
+    return (
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+          padding: '20px',
+          textAlign: 'center',
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>
+            No se encontró tu operador configurado
+          </h1>
+          <p style={{ fontSize: '0.95rem', opacity: 0.9 }}>
+            Tu cuenta está autorizada, pero no tiene un operador vinculado.
+            Contacta al administrador para que asocie tu correo a un operador.
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  return <OperatorPanel operatorId={operatorId} operatorLabel={operatorLabel} />
+}
+
+/**
+ * PANEL DEL OPERADOR
+ * Reutilizamos toda la lógica que ya tenías, pero:
+ *  - quitamos la lista desplegable de todos los operadores
+ *  - usamos el operatorId que viene del usuario logueado
+ */
+function OperatorPanel({ operatorId, operatorLabel }) {
   const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -37,21 +164,18 @@ export default function OperatorPanel() {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  // -------- Cargar operadores --------
+  // -------- Cargar asignaciones del operador logueado --------
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'operators'), (snap) => {
-      setOperators(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    })
-    return () => unsub()
-  }, [])
-
-  // -------- Cargar asignaciones --------
-  useEffect(() => {
-    if (!selectedOperator) return setAssignments([])
+    if (!operatorId) {
+      setAssignments([])
+      return
+    }
 
     setLoading(true)
+    setError('')
+
     let statusFilter = ['pendiente', 'en_progreso', 'pausado']
-    
+
     if (activeTab === 'finalizadas') {
       statusFilter = ['finalizado']
     } else if (activeTab === 'todas') {
@@ -60,7 +184,7 @@ export default function OperatorPanel() {
 
     const q = query(
       collection(db, 'assignments'),
-      where('operatorId', '==', selectedOperator),
+      where('operatorId', '==', operatorId),
       where('status', 'in', statusFilter)
     )
 
@@ -76,16 +200,17 @@ export default function OperatorPanel() {
         setLoading(false)
       }
     )
+
     return () => unsub()
-  }, [selectedOperator, activeTab])
+  }, [operatorId, activeTab])
 
   // -------- Estadísticas actualizadas --------
   const stats = {
-    pendientes: assignments.filter(a => a.status === 'pendiente').length,
-    enProgreso: assignments.filter(a => a.status === 'en_progreso').length,
-    pausadas: assignments.filter(a => a.status === 'pausado').length,
-    finalizadas: assignments.filter(a => a.status === 'finalizado').length,
-    total: assignments.length
+    pendientes: assignments.filter((a) => a.status === 'pendiente').length,
+    enProgreso: assignments.filter((a) => a.status === 'en_progreso').length,
+    pausadas: assignments.filter((a) => a.status === 'pausado').length,
+    finalizadas: assignments.filter((a) => a.status === 'finalizado').length,
+    total: assignments.length,
   }
 
   // -------- Acciones principales --------
@@ -190,7 +315,7 @@ export default function OperatorPanel() {
       pendiente: '#f59e0b',
       en_progreso: '#10b981',
       pausado: '#ef4444',
-      finalizado: '#6b7280'
+      finalizado: '#6b7280',
     }
     return colors[status] || '#6b7280'
   }
@@ -200,7 +325,7 @@ export default function OperatorPanel() {
       pendiente: '⏳',
       en_progreso: '▶️',
       pausado: '⏸️',
-      finalizado: '✅'
+      finalizado: '✅',
     }
     return icons[status] || '📝'
   }
@@ -208,235 +333,302 @@ export default function OperatorPanel() {
   // -------- Render --------
   return (
     <main style={{ ...styles.page, ...(isMobile ? responsiveStyles.page : {}) }}>
-      <div style={{ ...styles.container, ...(isMobile ? responsiveStyles.container : {}) }}>
-        
+      <div
+        style={{ ...styles.container, ...(isMobile ? responsiveStyles.container : {}) }}
+      >
         {/* Header Moderno */}
-        <header style={{ ...styles.header, ...(isMobile ? responsiveStyles.header : {}) }}>
+        <header
+          style={{ ...styles.header, ...(isMobile ? responsiveStyles.header : {}) }}
+        >
           <div>
             <h1 style={styles.title}>Panel de Operador</h1>
-            <p style={styles.subtitle}>Controla tus actividades, tiempos y registros</p>
+            <p style={styles.subtitle}>
+              Controla tus actividades, tiempos y registros
+            </p>
           </div>
-          <div style={{ ...styles.stats, ...(isMobile ? responsiveStyles.stats : {}) }}>
-            <div style={{...styles.statCard, borderLeft: '3px solid #f59e0b'}}>
+          <div
+            style={{ ...styles.stats, ...(isMobile ? responsiveStyles.stats : {}) }}
+          >
+            <div style={{ ...styles.statCard, borderLeft: '3px solid #f59e0b' }}>
               <span style={styles.statNumber}>{stats.pendientes}</span>
               <span style={styles.statLabel}>Pendientes</span>
             </div>
-            <div style={{...styles.statCard, borderLeft: '3px solid #10b981'}}>
+            <div style={{ ...styles.statCard, borderLeft: '3px solid #10b981' }}>
               <span style={styles.statNumber}>{stats.enProgreso}</span>
               <span style={styles.statLabel}>En Progreso</span>
             </div>
-            <div style={{...styles.statCard, borderLeft: '3px solid #ef4444'}}>
+            <div style={{ ...styles.statCard, borderLeft: '3px solid #ef4444' }}>
               <span style={styles.statNumber}>{stats.pausadas}</span>
               <span style={styles.statLabel}>Pausadas</span>
             </div>
-            <div style={{...styles.statCard, borderLeft: '3px solid #6b7280'}}>
+            <div style={{ ...styles.statCard, borderLeft: '3px solid #6b7280' }}>
               <span style={styles.statNumber}>{stats.finalizadas}</span>
               <span style={styles.statLabel}>Finalizadas</span>
             </div>
           </div>
         </header>
 
-        {/* Selector de Operador */}
-        <section style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}>
+        {/* Información del operador logueado (sin desplegable) */}
+        <section
+          style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
+        >
           <div style={styles.formGroup}>
-            <label style={styles.label}>👤 Selecciona tu operador</label>
-            <select
-              value={selectedOperator}
-              onChange={(e) => setSelectedOperator(e.target.value)}
-              style={styles.select}
+            <label style={styles.label}>👤 Operador asignado</label>
+            <div
+              style={{
+                ...styles.select,
+                backgroundColor: '#f9fafb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'default',
+              }}
             >
-              <option value="">Elige tu cuenta...</option>
-              {operators.map((op) => (
-                <option key={op.id} value={op.id}>
-                  {op.name} {op.codigo ? `(${op.codigo})` : ''}
-                </option>
-              ))}
-            </select>
+              <span>{operatorLabel || 'Operador vinculado a tu cuenta'}</span>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  color: '#6b7280',
+                }}
+              >
+                Solo lectura
+              </span>
+            </div>
           </div>
         </section>
 
-        {selectedOperator && (
-          <>
-            {/* Tabs de Navegación */}
-            <div style={{ ...styles.tabs, ...(isMobile ? responsiveStyles.tabs : {}) }}>
-              <button
-                onClick={() => setActiveTab('activas')}
-                style={{
-                  ...styles.tab,
-                  ...(activeTab === 'activas' ? styles.tabActive : {})
-                }}
-              >
-                🚀 Activas
-              </button>
-              <button
-                onClick={() => setActiveTab('finalizadas')}
-                style={{
-                  ...styles.tab,
-                  ...(activeTab === 'finalizadas' ? styles.tabActive : {})
-                }}
-              >
-                ✅ Finalizadas
-              </button>
-              <button
-                onClick={() => setActiveTab('todas')}
-                style={{
-                  ...styles.tab,
-                  ...(activeTab === 'todas' ? styles.tabActive : {})
-                }}
-              >
-                📋 Todas
-              </button>
+        {/* Tabs de Navegación */}
+        <div
+          style={{ ...styles.tabs, ...(isMobile ? responsiveStyles.tabs : {}) }}
+        >
+          <button
+            onClick={() => setActiveTab('activas')}
+            style={{
+              ...styles.tab,
+              ...(activeTab === 'activas' ? styles.tabActive : {}),
+            }}
+          >
+            🚀 Activas
+          </button>
+          <button
+            onClick={() => setActiveTab('finalizadas')}
+            style={{
+              ...styles.tab,
+              ...(activeTab === 'finalizadas' ? styles.tabActive : {}),
+            }}
+          >
+            ✅ Finalizadas
+          </button>
+          <button
+            onClick={() => setActiveTab('todas')}
+            style={{
+              ...styles.tab,
+              ...(activeTab === 'todas' ? styles.tabActive : {}),
+            }}
+          >
+            📋 Todas
+          </button>
+        </div>
+
+        {/* Contador de actividades */}
+        <div
+          style={{
+            ...styles.counterBar,
+            ...(isMobile ? responsiveStyles.counterBar : {}),
+          }}
+        >
+          <span style={styles.counterText}>
+            {assignments.length} actividad
+            {assignments.length !== 1 ? 'es' : ''}{' '}
+            {activeTab === 'activas'
+              ? 'activas'
+              : activeTab === 'finalizadas'
+              ? 'finalizadas'
+              : 'en total'}
+          </span>
+        </div>
+
+        {/* Contenido de Asignaciones */}
+        <section
+          style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
+        >
+          {error && <div style={styles.error}>⚠️ {error}</div>}
+
+          {loading ? (
+            <div style={styles.loading}>
+              <div style={styles.spinner}></div>
+              <p>Cargando actividades...</p>
             </div>
-
-            {/* Contador de actividades */}
-            <div style={{ ...styles.counterBar, ...(isMobile ? responsiveStyles.counterBar : {}) }}>
-              <span style={styles.counterText}>
-                {assignments.length} actividad{assignments.length !== 1 ? 'es' : ''} {activeTab === 'activas' ? 'activas' : activeTab === 'finalizadas' ? 'finalizadas' : 'en total'}
-              </span>
+          ) : assignments.length === 0 ? (
+            <div style={styles.emptyState}>
+              <div style={styles.emptyIcon}>📝</div>
+              <h3>
+                No hay actividades{' '}
+                {activeTab === 'activas'
+                  ? 'activas'
+                  : activeTab === 'finalizadas'
+                  ? 'finalizadas'
+                  : ''}
+              </h3>
+              <p>Cuando tengas nuevas asignaciones, aparecerán aquí.</p>
             </div>
-
-            {/* Contenido de Asignaciones */}
-            <section style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}>
-              {error && (
-                <div style={styles.error}>
-                  ⚠️ {error}
-                </div>
-              )}
-
-              {loading ? (
-                <div style={styles.loading}>
-                  <div style={styles.spinner}></div>
-                  <p>Cargando actividades...</p>
-                </div>
-              ) : assignments.length === 0 ? (
-                <div style={styles.emptyState}>
-                  <div style={styles.emptyIcon}>📝</div>
-                  <h3>No hay actividades {activeTab === 'activas' ? 'activas' : activeTab === 'finalizadas' ? 'finalizadas' : ''}</h3>
-                  <p>Cuando tengas nuevas asignaciones, aparecerán aquí.</p>
-                </div>
-              ) : (
-                <div style={{ ...styles.assignmentsGrid, ...(isMobile ? responsiveStyles.assignmentsGrid : {}) }}>
-                  {assignments.map((assignment) => (
-                    <div key={assignment.id} style={styles.assignmentCard}>
-                      <div style={{ ...styles.assignmentHeader, ...(isMobile ? responsiveStyles.assignmentHeader : {}) }}>
-                        <div style={styles.assignmentInfo}>
-                          <h3 style={styles.activityTitle}>{assignment.activity}</h3>
-                          <p style={styles.location}>📍 {assignment.location}</p>
-                          {assignment.solicitadoPor && (
-                            <p style={styles.solicitadoPor}>
-                              👥 Solicitado por: <strong>{assignment.solicitadoPor}</strong>
-                            </p>
-                          )}
-                        </div>
-                        <div style={{
-                          ...styles.statusBadge,
-                          backgroundColor: `${getStatusColor(assignment.status)}20`,
-                          color: getStatusColor(assignment.status)
-                        }}>
-                          {getStatusIcon(assignment.status)} {assignment.status.replace('_', ' ')}
-                        </div>
-                      </div>
-
-                      <div style={{ ...styles.timeInfo, ...(isMobile ? responsiveStyles.timeInfo : {}) }}>
-                        <div style={styles.timeItem}>
-                          <span style={styles.timeLabel}>Inicio:</span>
-                          <span style={styles.timeValue}>{formatTime(assignment.startTime)}</span>
-                        </div>
-                        <div style={styles.timeItem}>
-                          <span style={styles.timeLabel}>Fin:</span>
-                          <span style={styles.timeValue}>{formatTime(assignment.endTime)}</span>
-                        </div>
-                        {assignment.durationMinutes && (
-                          <div style={styles.timeItem}>
-                            <span style={styles.timeLabel}>Duración:</span>
-                            <span style={styles.timeValue}>{assignment.durationMinutes} min</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Acciones */}
-                      <div style={{ ...styles.actions, ...(isMobile ? responsiveStyles.actions : {}) }}>
-                        {assignment.status === 'pendiente' && (
-                          <button 
-                            onClick={() => handleStart(assignment.id)}
-                            style={styles.btnPrimary}
-                          >
-                            ▶️ Iniciar
-                          </button>
-                        )}
-                        
-                        {assignment.status === 'en_progreso' && (
-                          <>
-                            <button 
-                              onClick={() => handlePause(assignment.id)}
-                              style={styles.btnSecondary}
-                            >
-                              ⏸️ Pausar
-                            </button>
-                            <button 
-                              onClick={() => handleFinish(assignment)}
-                              style={styles.btnSuccess}
-                            >
-                              ✅ Finalizar
-                            </button>
-                          </>
-                        )}
-                        
-                        {assignment.status === 'pausado' && (
-                          <>
-                            <button 
-                              onClick={() => handleResume(assignment.id)}
-                              style={styles.btnPrimary}
-                            >
-                              ▶️ Reanudar
-                            </button>
-                            <button 
-                              onClick={() => handleFinish(assignment)}
-                              style={styles.btnSuccess}
-                            >
-                              ✅ Finalizar
-                            </button>
-                          </>
-                        )}
-
-                        {assignment.status !== 'finalizado' && (
-                          <button 
-                            onClick={() => openNoteModal(assignment)}
-                            style={styles.btnOutline}
-                          >
-                            📝 Nota
-                          </button>
-                        )}
-
-                        {assignment.status === 'finalizado' && (
-                          <div style={styles.completedBadge}>
-                            ✅ Completado • {assignment.durationMinutes || '0'} min
-                          </div>
-                        )}
-                      </div>
-
-                      {assignment.evidences && assignment.evidences.filter(ev => ev.type === 'text').length > 0 && (
-                        <div style={styles.notesSection}>
-                          <h4 style={styles.notesTitle}>Notas:</h4>
-                          {assignment.evidences
-                            .filter(ev => ev.type === 'text')
-                            .map((ev, index) => (
-                              <div key={index} style={styles.noteItem}>
-                                <p style={styles.noteText}>{ev.content}</p>
-                                <span style={styles.noteTime}>
-                                  {ev.createdAt?.toDate ? formatTime(ev.createdAt) : 'Ahora'}
-                                </span>
-                              </div>
-                            ))}
-                        </div>
+          ) : (
+            <div
+              style={{
+                ...styles.assignmentsGrid,
+                ...(isMobile ? responsiveStyles.assignmentsGrid : {}),
+              }}
+            >
+              {assignments.map((assignment) => (
+                <div key={assignment.id} style={styles.assignmentCard}>
+                  <div
+                    style={{
+                      ...styles.assignmentHeader,
+                      ...(isMobile ? responsiveStyles.assignmentHeader : {}),
+                    }}
+                  >
+                    <div style={styles.assignmentInfo}>
+                      <h3 style={styles.activityTitle}>{assignment.activity}</h3>
+                      <p style={styles.location}>📍 {assignment.location}</p>
+                      {assignment.solicitadoPor && (
+                        <p style={styles.solicitadoPor}>
+                          👥 Solicitado por:{' '}
+                          <strong>{assignment.solicitadoPor}</strong>
+                        </p>
                       )}
                     </div>
-                  ))}
+                    <div
+                      style={{
+                        ...styles.statusBadge,
+                        backgroundColor: `${getStatusColor(
+                          assignment.status
+                        )}20`,
+                        color: getStatusColor(assignment.status),
+                      }}
+                    >
+                      {getStatusIcon(assignment.status)}{' '}
+                      {assignment.status.replace('_', ' ')}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      ...styles.timeInfo,
+                      ...(isMobile ? responsiveStyles.timeInfo : {}),
+                    }}
+                  >
+                    <div style={styles.timeItem}>
+                      <span style={styles.timeLabel}>Inicio:</span>
+                      <span style={styles.timeValue}>
+                        {formatTime(assignment.startTime)}
+                      </span>
+                    </div>
+                    <div style={styles.timeItem}>
+                      <span style={styles.timeLabel}>Fin:</span>
+                      <span style={styles.timeValue}>
+                        {formatTime(assignment.endTime)}
+                      </span>
+                    </div>
+                    {assignment.durationMinutes && (
+                      <div style={styles.timeItem}>
+                        <span style={styles.timeLabel}>Duración:</span>
+                        <span style={styles.timeValue}>
+                          {assignment.durationMinutes} min
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Acciones */}
+                  <div
+                    style={{
+                      ...styles.actions,
+                      ...(isMobile ? responsiveStyles.actions : {}),
+                    }}
+                  >
+                    {assignment.status === 'pendiente' && (
+                      <button
+                        onClick={() => handleStart(assignment.id)}
+                        style={styles.btnPrimary}
+                      >
+                        ▶️ Iniciar
+                      </button>
+                    )}
+
+                    {assignment.status === 'en_progreso' && (
+                      <>
+                        <button
+                          onClick={() => handlePause(assignment.id)}
+                          style={styles.btnSecondary}
+                        >
+                          ⏸️ Pausar
+                        </button>
+                        <button
+                          onClick={() => handleFinish(assignment)}
+                          style={styles.btnSuccess}
+                        >
+                          ✅ Finalizar
+                        </button>
+                      </>
+                    )}
+
+                    {assignment.status === 'pausado' && (
+                      <>
+                        <button
+                          onClick={() => handleResume(assignment.id)}
+                          style={styles.btnPrimary}
+                        >
+                          ▶️ Reanudar
+                        </button>
+                        <button
+                          onClick={() => handleFinish(assignment)}
+                          style={styles.btnSuccess}
+                        >
+                          ✅ Finalizar
+                        </button>
+                      </>
+                    )}
+
+                    {assignment.status !== 'finalizado' && (
+                      <button
+                        onClick={() => openNoteModal(assignment)}
+                        style={styles.btnOutline}
+                      >
+                        📝 Nota
+                      </button>
+                    )}
+
+                    {assignment.status === 'finalizado' && (
+                      <div style={styles.completedBadge}>
+                        ✅ Completado • {assignment.durationMinutes || '0'} min
+                      </div>
+                    )}
+                  </div>
+
+                  {assignment.evidences &&
+                    assignment.evidences.filter((ev) => ev.type === 'text')
+                      .length > 0 && (
+                      <div style={styles.notesSection}>
+                        <h4 style={styles.notesTitle}>Notas:</h4>
+                        {assignment.evidences
+                          .filter((ev) => ev.type === 'text')
+                          .map((ev, index) => (
+                            <div key={index} style={styles.noteItem}>
+                              <p style={styles.noteText}>{ev.content}</p>
+                              <span style={styles.noteTime}>
+                                {ev.createdAt?.toDate
+                                  ? formatTime(ev.createdAt)
+                                  : 'Ahora'}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                 </div>
-              )}
-            </section>
-          </>
-        )}
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Modal Notas Moderno */}
@@ -445,24 +637,25 @@ export default function OperatorPanel() {
           <div style={styles.modal}>
             <div style={styles.modalHeader}>
               <h3>📝 Agregar Nota</h3>
-              <button 
+              <button
                 onClick={() => setShowNoteModal(false)}
                 style={styles.closeButton}
               >
                 ×
               </button>
             </div>
-            
+
             <div style={styles.modalBody}>
               <p style={styles.modalAssignment}>
                 Actividad: <strong>{selectedAssignment?.activity}</strong>
               </p>
               {selectedAssignment?.solicitadoPor && (
                 <p style={styles.modalSolicitado}>
-                  Solicitado por: <strong>{selectedAssignment.solicitadoPor}</strong>
+                  Solicitado por:{' '}
+                  <strong>{selectedAssignment.solicitadoPor}</strong>
                 </p>
               )}
-              
+
               <textarea
                 placeholder="Escribe tus observaciones, comentarios o detalles importantes..."
                 value={noteText}
@@ -472,7 +665,7 @@ export default function OperatorPanel() {
               />
 
               <div style={styles.modalActions}>
-                <button 
+                <button
                   onClick={() => setShowNoteModal(false)}
                   style={styles.btnCancel}
                 >
@@ -483,7 +676,7 @@ export default function OperatorPanel() {
                   disabled={saving || !noteText.trim()}
                   style={{
                     ...styles.btnSave,
-                    ...((saving || !noteText.trim()) && styles.btnDisabled)
+                    ...((saving || !noteText.trim()) && styles.btnDisabled),
                   }}
                 >
                   {saving ? '💾 Guardando...' : '💾 Guardar Nota'}
@@ -497,7 +690,8 @@ export default function OperatorPanel() {
   )
 }
 
-// -------- Estilos Modernos --------
+/* -------- Estilos Modernos (tus estilos originales) -------- */
+// (los dejo tal cual como los tenías)
 const styles = {
   page: {
     minHeight: '100vh',
@@ -876,17 +1070,18 @@ const styles = {
     fontSize: '0.875rem',
     fontStyle: 'italic',
   },
-  textarea: {
-    width: '100%',
-    border: '2px solid #e5e7eb',
-    borderRadius: '12px',
-    padding: '16px',
-    fontSize: '0.875rem',
-    resize: 'vertical',
-    minHeight: '120px',
-    fontFamily: 'inherit',
-    transition: 'border-color 0.2s ease',
-  },
+ textarea: {
+  width: '100%',
+  border: '2px solid #e5e7eb',
+  borderRadius: '12px',
+  padding: '16px',
+  fontSize: '0.875rem',
+  resize: 'vertical',
+  minHeight: '120px',
+  fontFamily: 'inherit',
+  transition: 'border-color 0.2s ease',
+},
+
   modalActions: {
     display: 'flex',
     gap: '12px',
@@ -921,7 +1116,7 @@ const styles = {
   },
 }
 
-// 👇 SOLO AÑADIMOS OVERRIDES PARA MÓVIL, SIN QUITAR NADA
+// Overrides responsive (igual que antes)
 const responsiveStyles = {
   page: {
     padding: '12px',
@@ -960,17 +1155,5 @@ const responsiveStyles = {
   actions: {
     flexDirection: 'column',
     alignItems: 'stretch',
-  },
-}
-
-// Agregar animación CSS (se mantiene igual que lo tenías)
-const stylesWithAnimation = {
-  ...styles,
-  spinner: {
-    ...styles.spinner,
-    '@keyframes spin': {
-      '0%': { transform: 'rotate(0deg)' },
-      '100%': { transform: 'rotate(360deg)' },
-    },
   },
 }
