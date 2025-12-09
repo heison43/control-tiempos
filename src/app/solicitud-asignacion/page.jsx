@@ -268,8 +268,6 @@ export default function SolicitudAsignacionPage() {
               </div>
 
               <div className="form__group form__group--two">
-                
-
                 <div className="form__field">
                   <label>Área</label>
                   <input
@@ -375,7 +373,7 @@ export default function SolicitudAsignacionPage() {
               />
               <button
                 type="submit"
-                className="btn btn--ghost"
+                className="btn btn--ghost lookup__button"
                 disabled={lookupLoading}
               >
                 {lookupLoading ? 'Buscando...' : 'Consultar'}
@@ -436,11 +434,22 @@ export default function SolicitudAsignacionPage() {
 
       {/* ESTILOS */}
       <style jsx>{`
+        /* reset pequeño para evitar scroll horizontal raro */
+        .page,
+        .content,
+        .card,
+        .form__field input,
+        .form__field textarea,
+        .lookup__input {
+          box-sizing: border-box;
+        }
+
         .page {
           min-height: 100vh;
-          padding: 40px 16px;
+          padding: 32px 16px;
           display: flex;
           justify-content: center;
+          align-items: flex-start;
           background:
             radial-gradient(circle at top left, #4f46e5 0, transparent 50%),
             radial-gradient(circle at bottom right, #0ea5e9 0, transparent 55%),
@@ -471,6 +480,7 @@ export default function SolicitudAsignacionPage() {
           align-items: center;
           justify-content: center;
           box-shadow: 0 10px 25px rgba(15, 118, 110, 0.45);
+          flex-shrink: 0;
         }
 
         .header__icon-rocket {
@@ -494,12 +504,6 @@ export default function SolicitudAsignacionPage() {
           display: grid;
           grid-template-columns: minmax(0, 3fr) minmax(0, 2.2fr);
           gap: 24px;
-        }
-
-        @media (max-width: 900px) {
-          .main-grid {
-            grid-template-columns: 1fr;
-          }
         }
 
         .card {
@@ -552,12 +556,6 @@ export default function SolicitudAsignacionPage() {
           display: grid;
           gap: 12px;
           grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        @media (max-width: 700px) {
-          .form__group--two {
-            grid-template-columns: 1fr;
-          }
         }
 
         .form__field label {
@@ -808,6 +806,90 @@ export default function SolicitudAsignacionPage() {
           background: rgba(234, 179, 8, 0.16);
           color: #facc15;
           border: 1px solid rgba(250, 204, 21, 0.9);
+        }
+
+        /* ------------- RESPONSIVE ------------- */
+
+        @media (max-width: 900px) {
+          .main-grid {
+            grid-template-columns: 1fr;
+            gap: 18px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .page {
+            padding: 20px 10px 24px;
+            align-items: stretch;
+          }
+
+          .content {
+            max-width: 640px;
+            margin: 0 auto;
+          }
+
+          .header {
+            flex-direction: row;
+            align-items: flex-start;
+          }
+
+          .card {
+            padding: 18px 16px 16px;
+            border-radius: 18px;
+          }
+
+          .form__group--two {
+            grid-template-columns: 1fr;
+          }
+
+          .form__footer {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .btn--primary {
+            width: 100%;
+          }
+
+          .lookup {
+            flex-direction: column;
+          }
+
+          .lookup__button {
+            width: 100%;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .page {
+            padding: 16px 8px 24px;
+          }
+
+          .header {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .header__title {
+            font-size: 1.5rem;
+          }
+
+          .card {
+            padding: 16px 14px 14px;
+          }
+
+          .card__title {
+            font-size: 1.1rem;
+          }
+
+          .form__field input,
+          .form__field textarea {
+            font-size: 0.85rem;
+          }
+
+          .btn {
+            font-size: 0.85rem;
+          }
         }
       `}</style>
     </div>

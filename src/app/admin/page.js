@@ -33,8 +33,20 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('nueva');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [cedulaSolicitante, setCedulaSolicitante] = useState('');
-const [centroCosto, setCentroCosto] = useState('');
+    const [cedulaSolicitante, setCedulaSolicitante] = useState('');
+  const [centroCosto, setCentroCosto] = useState('');
+
+    const [linkedRequest, setLinkedRequest] = useState(null); // solicitud usada para crear asignación
+
+  // paginación de la tabla de asignaciones
+  const [pageSize, setPageSize] = useState(20); // filas por página (5,10,20,30,50)
+  const [currentPage, setCurrentPage] = useState(1);
+
+
+  // vínculo opcional con la solicitud pública usada para crear la asignación
+  const [linkedRequestId, setLinkedRequestId] = useState(null);
+  const [linkedRequestCreatedAt, setLinkedRequestCreatedAt] = useState(null);
+
 
 
   // solicitudes públicas
@@ -112,6 +124,7 @@ const [centroCosto, setCentroCosto] = useState('');
   }, [equipment]);
 
   // ---------- Filtro por rango de fechas y estado ----------
+    // ---------- Filtro por rango de fechas y estado ----------
   const assignmentsFiltered = useMemo(() => {
     let filtered = assignments;
 
@@ -148,6 +161,26 @@ const [centroCosto, setCentroCosto] = useState('');
 
     return filtered;
   }, [assignments, activeTab, startDate, endDate]);
+
+  // ---------- Paginación de la tabla de asignaciones ----------
+  // Reiniciar a página 1 cuando cambian filtros o pestaña
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, startDate, endDate]);
+
+  // Asignaciones paginadas
+  const paginatedAssignments = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return assignmentsFiltered.slice(startIndex, startIndex + pageSize);
+  }, [assignmentsFiltered, currentPage, pageSize]);
+
+  const totalPages = useMemo(
+    () =>
+      assignmentsFiltered.length === 0
+        ? 1
+        : Math.ceil(assignmentsFiltered.length / pageSize),
+    [assignmentsFiltered.length, pageSize]
+  );
 
   // ---------- Estadísticas ----------
   const stats = useMemo(
@@ -212,18 +245,19 @@ const [centroCosto, setCentroCosto] = useState('');
             .toLocaleString('es-CO', { timeZone: 'America/Bogota' })
         : '';
 
-      return [
-        r.code || '',
-        createdStr,
-        r.status || 'pending',
-        r.requesterName || '',
-        r.requesterId || '',
-        r.requesterArea || r.area || '',
-        r.costCenter || '',
-        r.location || '',
-        r.activity || '',
-        r.responseMessage || '',
-      ];
+          return [
+      r.trackingCode || r.code || '',
+      createdStr,
+      r.status || 'pending',
+      r.requesterName || '',
+      r.requesterId || '',
+      r.requesterArea || r.area || '',
+      r.costCenter || '',
+      r.location || '',
+      r.activity || '',
+      r.responseMessage || '',
+    ];
+
     });
 
     return [header, ...rows]
@@ -293,21 +327,31 @@ const [centroCosto, setCentroCosto] = useState('');
     }
   };
 
-  const handleUseRequestToCreateAssignment = (req) => {
-  // Nombre del solicitante
-  setSolicitadoPor(req.requesterName || '');
+      const handleUseRequestToCreateAssignment = (req) => {
+    // Nombre del solicitante
+    setSolicitadoPor(req.requesterName || '');
 
-  // Actividad y lugar
-  setActivity(req.activity || '');
-  setLocation(req.location || '');
+    // Actividad y lugar
+    setActivity(req.activity || '');
+    setLocation(req.location || '');
 
-  // 👇 NUEVO: cédula y centro de costo
-  setCedulaSolicitante(req.requesterId || '');
-  setCentroCosto(req.costCenter || '');
+    // Cédula y centro de costo desde la solicitud
+    setCedulaSolicitante(req.requesterId || '');
+    setCentroCosto(req.costCenter || '');
 
-  // Cambiar a la pestaña de Asignación Rápida
-  setActiveTab('nueva');
-};
+    // Guardar datos de la solicitud para enlazarla a la asignación
+    setLinkedRequest({
+  id: req.id,
+  code: req.trackingCode || req.code || null,
+  createdAt: req.createdAt || null,
+});
+
+
+    // Cambiar a la pestaña de Asignación Rápida
+    setActiveTab('nueva');
+  };
+
+
 
 
   // ---------- Lógica Operador → Equipo ----------
@@ -358,118 +402,183 @@ const [centroCosto, setCentroCosto] = useState('');
   });
 
   // ---------- Crear asignación ----------
-  const handleCreateAssignment = async (e) => {
-  e.preventDefault();
-  setError('');
+      const handleCreateAssignment = async (e) => {
+    e.preventDefault();
+    setError('');
 
-  if (
-    !selectedOperator ||
-    !activity.trim() ||
-    !location.trim() ||
-    !solicitadoPor.trim()
-  ) {
-    setError('Completa operador, actividad, lugar y solicitado por.');
-    return;
-  }
+    if (
+      !selectedOperator ||
+      !activity.trim() ||
+      !location.trim() ||
+      !solicitadoPor.trim()
+    ) {
+      setError('Completa operador, actividad, lugar y solicitado por.');
+      return;
+    }
 
-  await addDoc(collection(db, 'assignments'), {
-    operatorId: selectedOperator,
-    equipmentId: selectedEquipment || null,
-    activity: activity.trim(),
-    location: location.trim(),
-    solicitadoPor: solicitadoPor.trim(),
-    cedulaSolicitante: cedulaSolicitante.trim() || null,  // 👈 NUEVO
-    centroCosto: centroCosto.trim() || null,              // 👈 NUEVO
-    status: 'pendiente',
-    createdAt: serverTimestamp(),
-    startTime: null,
-    endTime: null,
-    durationMinutes: null,
-    evidences: [],
-  });
+    // Usaremos el mismo serverTimestamp para createdAt y, si aplica,
+    // como fecha de solicitud cuando no viene de solicitud externa.
+    const nowTs = serverTimestamp();
 
-  setActivity('');
-  setLocation('');
-  setSolicitadoPor('');
-  setCedulaSolicitante('');  // 👈 NUEVO
-  setCentroCosto('');        // 👈 NUEVO
-  setSelectedOperator('');
-  setSelectedEquipment('');
-};
+    const data = {
+      operatorId: selectedOperator,
+      equipmentId: selectedEquipment || null,
+      activity: activity.trim(),
+      location: location.trim(),
+      solicitadoPor: solicitadoPor.trim(),
+      cedulaSolicitante: cedulaSolicitante.trim() || null,
+      centroCosto: centroCosto.trim() || null,
+      status: 'pendiente',
+      createdAt: nowTs,
+      startTime: null,
+      endTime: null,
+      durationMinutes: null,
+      evidences: [],
+    };
+
+    // 👉 Si viene de una solicitud externa, usamos la fecha/código de esa solicitud
+    if (linkedRequest) {
+      data.linkedRequestId = linkedRequest.id;
+      data.requestCode = linkedRequest.code || null;
+      data.requestCreatedAt = linkedRequest.createdAt || null; // fecha real de solicitud
+    } else {
+      // 👉 Asignaciones creadas directamente por el operador:
+      // la fecha/hora de solicitud será igual a la de creación
+      data.linkedRequestId = null;
+      data.requestCode = null;
+      data.requestCreatedAt = nowTs;
+    }
+
+    await addDoc(collection(db, 'assignments'), data);
+
+    // Limpiar formulario
+    setActivity('');
+    setLocation('');
+    setSolicitadoPor('');
+    setCedulaSolicitante('');
+    setCentroCosto('');
+    setSelectedOperator('');
+    setSelectedEquipment('');
+    setLinkedRequest(null); // limpiamos el enlace con la solicitud
+  };
+
+
 
 
   // ---------- Exportar CSV ----------
-  const buildCsvFromAssignments = (list) => {
-  const header = [
-    'Fecha',
-    'Operador',
-    'Equipo',
-    'Actividad',
-    'Solicitado por',
-    'Cédula solicitante',
-    'Centro de costos',
-    'Lugar',
-    'Estado',
-    'Inicio',
-    'Fin',
-    'Duración (min)',
-    'Notas',
-  ];
+      const buildCsvFromAssignments = (list) => {
+    const header = [
+      'Fecha solicitud',
+      'Hora solicitud',
+      'Fecha creación',
+      'Hora creación',
+      'Operador',
+      'Equipo',
+      'Actividad',
+      'Solicitado por',
+      'Cédula solicitante',
+      'Centro de costos',
+      'Lugar',
+      'Estado',
+      'Código solicitud',
+      'Inicio',
+      'Fin',
+      'Duración (min)',
+      'Notas',
+    ];
 
-  const rows = list.map((a) => {
-    const opName = operatorMap[a.operatorId] || a.operatorId || '';
-    const eqName = equipmentMap[a.equipmentId] || a.equipmentId || '';
-    const dateStr = a.createdAt?.toDate
-      ? a.createdAt
-          .toDate()
-          .toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })
-      : '';
-    const startStr = a.startTime?.toDate
-      ? a.startTime
-          .toDate()
-          .toLocaleTimeString('es-CO', {
+    const rows = list.map((a) => {
+      const opName = operatorMap[a.operatorId] || a.operatorId || '';
+      const eqName = equipmentMap[a.equipmentId] || a.equipmentId || '';
+
+      // timestamp de solicitud: si no existe, usamos createdAt
+      const reqTs = a.requestCreatedAt?.toDate
+        ? a.requestCreatedAt.toDate()
+        : a.createdAt?.toDate
+        ? a.createdAt.toDate()
+        : null;
+
+      const createdTs = a.createdAt?.toDate ? a.createdAt.toDate() : null;
+
+      const reqDateStr = reqTs
+        ? reqTs.toLocaleDateString('es-CO', {
+            timeZone: 'America/Bogota',
+          })
+        : '';
+      const reqTimeStr = reqTs
+        ? reqTs.toLocaleTimeString('es-CO', {
             hour: '2-digit',
             minute: '2-digit',
             timeZone: 'America/Bogota',
           })
-      : '';
-    const endStr = a.endTime?.toDate
-      ? a.endTime
-          .toDate()
-          .toLocaleTimeString('es-CO', {
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: 'America/Bogota',
-          })
-      : '';
-    const evidences =
-      a.evidences && Array.isArray(a.evidences)
-        ? a.evidences
-            .map((ev) => (ev.type === 'text' ? ev.content : ev.url))
-            .join(' | ')
         : '';
 
-    return [
-      dateStr,
-      opName,
-      eqName,
-      a.activity || '',
-      a.solicitadoPor || '',
-      a.cedulaSolicitante || '',
-      a.centroCosto || '',
-      a.location || '',
-      a.status || '',
-      startStr,
-      endStr,
-      a.durationMinutes ?? '',
-      evidences,
-    ];
-  });
+      const createdDateStr = createdTs
+        ? createdTs.toLocaleDateString('es-CO', {
+            timeZone: 'America/Bogota',
+          })
+        : '';
+      const createdTimeStr = createdTs
+        ? createdTs.toLocaleTimeString('es-CO', {
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'America/Bogota',
+          })
+        : '';
 
-  return [header, ...rows]
-    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
-    .join('\n');
-};
+      const startStr = a.startTime?.toDate
+        ? a.startTime
+            .toDate()
+            .toLocaleTimeString('es-CO', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Bogota',
+            })
+        : '';
+      const endStr = a.endTime?.toDate
+        ? a.endTime
+            .toDate()
+            .toLocaleTimeString('es-CO', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Bogota',
+            })
+        : '';
+
+      const evidences =
+        a.evidences && Array.isArray(a.evidences)
+          ? a.evidences
+              .map((ev) => (ev.type === 'text' ? ev.content : ev.url))
+              .join(' | ')
+          : '';
+
+      return [
+        reqDateStr,
+        reqTimeStr,
+        createdDateStr,
+        createdTimeStr,
+        opName,
+        eqName,
+        a.activity || '',
+        a.solicitadoPor || '',
+        a.cedulaSolicitante || '',
+        a.centroCosto || '',
+        a.location || '',
+        a.status || '',
+        a.requestCode || '',
+        startStr,
+        endStr,
+        a.durationMinutes ?? '',
+        evidences,
+      ];
+    });
+
+    return [header, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+  };
+
+
 
   const handleExportCSV = () => {
     if (assignmentsFiltered.length === 0) {
@@ -944,164 +1053,300 @@ const [centroCosto, setCentroCosto] = useState('');
                   }}
                 >
                   <table style={styles.table}>
-                    <thead>
-  <tr>
-    {[
-      'Fecha',
-      'Operador',
-      'Equipo',
-      'Actividad',
-      'Solicitado por',
-      'Cédula',
-      'Centro de costos',
-      'Lugar',
-      'Estado',
-      'Inicio',
-      'Fin',
-      'Duración',
-      'Notas',
-    ].map((t) => (
-      <th key={t} style={styles.th}>
-        {t}
-      </th>
-    ))}
-  </tr>
-</thead>
+                                        <thead>
+                      <tr>
+                        {[
+                          'Fecha solicitud',
+                          'Hora solicitud',
+                          'Fecha creación',
+                          'Hora creación',
+                          'Operador',
+                          'Equipo',
+                          'Actividad',
+                          'Solicitado por',
+                          'Cédula',
+                          'Centro de costos',
+                          'Lugar',
+                          'Estado',
+                          'Código solicitud',
+                          'Inicio',
+                          'Fin',
+                          'Duración',
+                          'Notas',
+                        ].map((t) => (
+                          <th key={t} style={styles.th}>
+                            {t}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
 
-                    <tbody>
-  {assignmentsFiltered.map((a) => {
-    const statusConfig = getStatusConfig(a.status);
-    return (
-      <tr key={a.id} style={styles.tr}>
-        <td style={styles.td}>
-          <div style={styles.dateCell}>{formatDate(a.createdAt)}</div>
-        </td>
 
-        <td style={styles.td}>
-          <div style={styles.operatorCell}>
-            <span style={styles.operatorName}>
-              {operatorMap[a.operatorId] || '-'}
-            </span>
-          </div>
-        </td>
 
-        <td style={styles.td}>
-          <div style={styles.equipmentCell}>
-            {equipmentMap[a.equipmentId] || '-'}
-          </div>
-        </td>
 
-        <td style={styles.td}>
-          <div style={styles.activityCell}>{a.activity}</div>
-        </td>
+                                        <tbody>
+                      {paginatedAssignments.map((a) => {
+                        const statusConfig = getStatusConfig(a.status);
 
-        {/* Solicitado por */}
-        <td style={styles.td}>
-          <div style={styles.solicitadoCell}>
-            <span style={styles.solicitadoText}>
-              {a.solicitadoPor || '-'}
-            </span>
-          </div>
-        </td>
+                        // timestamp de solicitud (si no hay, usamos createdAt)
+                        const requestTs = a.requestCreatedAt || a.createdAt;
 
-        {/* Cédula solicitante */}
-        <td style={styles.td}>
-          <div style={styles.solicitadoCell}>
-            <span style={styles.solicitadoText}>
-              {a.cedulaSolicitante || '—'}
-            </span>
-          </div>
-        </td>
+                        return (
+                          <tr key={a.id} style={styles.tr}>
+                            {/* Fecha solicitud */}
+                            <td style={styles.td}>
+                              <div style={styles.dateCell}>
+                                {formatDate(requestTs)}
+                              </div>
+                            </td>
 
-        {/* Centro de costos */}
-        <td style={styles.td}>
-          <div style={styles.solicitadoCell}>
-            <span style={styles.solicitadoText}>
-              {a.centroCosto || '—'}
-            </span>
-          </div>
-        </td>
+                            {/* Hora solicitud */}
+                            <td style={styles.td}>
+                              <div style={styles.timeCell}>
+                                {formatTime(requestTs)}
+                              </div>
+                            </td>
 
-        {/* Lugar */}
-        <td style={styles.td}>
-          <div style={styles.locationCell}>
-            📍 {a.location}
-          </div>
-        </td>
+                            {/* Fecha creación */}
+                            <td style={styles.td}>
+                              <div style={styles.dateCell}>
+                                {formatDate(a.createdAt)}
+                              </div>
+                            </td>
 
-        {/* Estado */}
-        <td style={styles.td}>
-          <div
-            style={{
-              ...styles.statusBadge,
-              backgroundColor: statusConfig.bgColor,
-              color: statusConfig.color,
-            }}
-          >
-            {statusConfig.icon} {statusConfig.label}
-          </div>
-        </td>
+                            {/* Hora creación */}
+                            <td style={styles.td}>
+                              <div style={styles.timeCell}>
+                                {formatTime(a.createdAt)}
+                              </div>
+                            </td>
 
-        {/* Inicio */}
-        <td style={styles.td}>
-          <div style={styles.timeCell}>{formatTime(a.startTime)}</div>
-        </td>
+                            {/* Operador */}
+                            <td style={styles.td}>
+                              <div style={styles.operatorCell}>
+                                <span style={styles.operatorName}>
+                                  {operatorMap[a.operatorId] || '-'}
+                                </span>
+                              </div>
+                            </td>
 
-        {/* Fin */}
-        <td style={styles.td}>
-          <div style={styles.timeCell}>{formatTime(a.endTime)}</div>
-        </td>
+                            {/* Equipo */}
+                            <td style={styles.td}>
+                              <div style={styles.equipmentCell}>
+                                {equipmentMap[a.equipmentId] || '-'}
+                              </div>
+                            </td>
 
-        {/* Duración */}
-        <td style={styles.td}>
-          <div style={styles.durationCell}>
-            {formatDuration(a.durationMinutes)}
-          </div>
-        </td>
+                            {/* Actividad */}
+                            <td style={styles.td}>
+                              <div style={styles.activityCell}>
+                                {a.activity}
+                              </div>
+                            </td>
 
-        {/* Notas / evidencias */}
-        <td style={styles.td}>
-          <div style={styles.notesCell}>
-            {a.evidences?.length > 0 ? (
-              <div style={styles.evidences}>
-                {a.evidences.slice(0, 2).map((ev, i) => (
-                  <div key={i} style={styles.evidenceItem}>
-                    {ev.type === 'photo' ? (
-                      <img
-                        src={ev.url}
-                        alt="Evidencia"
-                        style={styles.evidenceImage}
-                      />
-                    ) : ev.type === 'audio' ? (
-                      <audio
-                        controls
-                        src={ev.url}
-                        style={styles.audioPlayer}
-                      />
-                    ) : (
-                      <div style={styles.textEvidence}>
-                        📝 {ev.content.substring(0, 30)}...
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {a.evidences.length > 2 && (
-                  <div style={styles.moreEvidences}>
-                    +{a.evidences.length - 2} más
-                  </div>
-                )}
-              </div>
-            ) : (
-              <span style={styles.noEvidence}>—</span>
-            )}
-          </div>
-        </td>
-      </tr>
-    );
-  })}
-</tbody>
+                            {/* Solicitado por */}
+                            <td style={styles.td}>
+                              <div style={styles.solicitadoCell}>
+                                <span style={styles.solicitadoText}>
+                                  {a.solicitadoPor || '-'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Cédula solicitante */}
+                            <td style={styles.td}>
+                              <div style={styles.solicitadoCell}>
+                                <span style={styles.solicitadoText}>
+                                  {a.cedulaSolicitante || '—'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Centro de costos */}
+                            <td style={styles.td}>
+                              <div style={styles.solicitadoCell}>
+                                <span style={styles.solicitadoText}>
+                                  {a.centroCosto || '—'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Lugar */}
+                            <td style={styles.td}>
+                              <div style={styles.locationCell}>
+                                📍 {a.location}
+                              </div>
+                            </td>
+
+                            {/* Estado */}
+                            <td style={styles.td}>
+                              <div
+                                style={{
+                                  ...styles.statusBadge,
+                                  backgroundColor: statusConfig.bgColor,
+                                  color: statusConfig.color,
+                                }}
+                              >
+                                {statusConfig.icon} {statusConfig.label}
+                              </div>
+                            </td>
+
+                            {/* Código solicitud */}
+                            <td style={styles.td}>
+                              <div style={styles.solicitadoCell}>
+                                <span style={styles.solicitadoText}>
+                                  {a.requestCode || '—'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Inicio */}
+                            <td style={styles.td}>
+                              <div style={styles.timeCell}>
+                                {formatTime(a.startTime)}
+                              </div>
+                            </td>
+
+                            {/* Fin */}
+                            <td style={styles.td}>
+                              <div style={styles.timeCell}>
+                                {formatTime(a.endTime)}
+                              </div>
+                            </td>
+
+                            {/* Duración */}
+                            <td style={styles.td}>
+                              <div style={styles.durationCell}>
+                                {formatDuration(a.durationMinutes)}
+                              </div>
+                            </td>
+
+                            {/* Notas / evidencias */}
+                            <td style={styles.td}>
+                              <div style={styles.notesCell}>
+                                {a.evidences?.length > 0 ? (
+                                  <div style={styles.evidences}>
+                                    {a.evidences.slice(0, 2).map((ev, i) => (
+                                      <div key={i} style={styles.evidenceItem}>
+                                        {ev.type === 'photo' ? (
+                                          <img
+                                            src={ev.url}
+                                            alt="Evidencia"
+                                            style={styles.evidenceImage}
+                                          />
+                                        ) : ev.type === 'audio' ? (
+                                          <audio
+                                            controls
+                                            src={ev.url}
+                                            style={styles.audioPlayer}
+                                          />
+                                        ) : (
+                                          <div style={styles.textEvidence}>
+                                            📝
+                                            {` ${ev.content.substring(0, 30)}...`}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {a.evidences.length > 2 && (
+                                      <div style={styles.moreEvidences}>
+                                        +{a.evidences.length - 2} más
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span style={styles.noEvidence}>—</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+
+
 
                   </table>
+                                      <div style={styles.paginationBar}>
+                      <div style={styles.paginationInfo}>
+                        {assignmentsFiltered.length === 0
+                          ? 'Sin asignaciones'
+                          : `Mostrando ${
+                              (currentPage - 1) * pageSize +
+                              1
+                            } - ${Math.min(
+                              currentPage * pageSize,
+                              assignmentsFiltered.length
+                            )} de ${assignmentsFiltered.length}`}
+                      </div>
+
+                      <div style={styles.paginationControls}>
+                        <label style={styles.paginationLabel}>
+                          Filas por página:{' '}
+                          <select
+                            value={pageSize}
+                            onChange={(e) => {
+                              setPageSize(Number(e.target.value));
+                              setCurrentPage(1);
+                            }}
+                            style={styles.paginationSelect}
+                          >
+                            {[5, 10, 20, 30, 50].map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <div style={styles.paginationButtons}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCurrentPage((p) => Math.max(1, p - 1))
+                            }
+                            disabled={currentPage === 1}
+                            style={styles.paginationButton}
+                          >
+                            ‹
+                          </button>
+
+                          {Array.from(
+                            { length: totalPages },
+                            (_, i) => i + 1
+                          ).map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setCurrentPage(p)}
+                              style={{
+                                ...styles.paginationButton,
+                                ...(currentPage === p
+                                  ? styles.paginationButtonActive
+                                  : {}),
+                              }}
+                            >
+                              {p}
+                            </button>
+                          ))}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCurrentPage((p) =>
+                                Math.min(totalPages, p + 1)
+                              )
+                            }
+                            disabled={currentPage === totalPages}
+                            style={styles.paginationButton}
+                          >
+                            ›
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+
                 </div>
               )}
             </section>
@@ -1155,9 +1400,12 @@ const [centroCosto, setCentroCosto] = useState('');
               </div>
             </div>
 
-            <div style={styles.requestFiltersBar}>
-
-
+            <div
+  style={{
+    ...styles.requestFiltersBar,
+    ...(isMobile ? styles.requestFiltersBarMobile : {}),
+  }}
+>
   {[
     { id: 'pending', label: 'Pendientes' },
     { id: 'approved', label: 'Aprobadas' },
@@ -1169,7 +1417,9 @@ const [centroCosto, setCentroCosto] = useState('');
       onClick={() => setRequestFilter(f.id)}
       style={{
         ...styles.requestFilterButton,
-        ...(requestFilter === f.id ? styles.requestFilterButtonActive : {}),
+        ...(requestFilter === f.id
+          ? styles.requestFilterButtonActive
+          : {}),
       }}
     >
       {f.label}
@@ -1178,8 +1428,19 @@ const [centroCosto, setCentroCosto] = useState('');
 </div>
 
 
-            <div style={styles.requestGrid}>
-              <div style={styles.requestList}>
+
+                        <div
+              style={{
+                ...styles.requestGrid,
+                ...(isMobile ? styles.requestGridMobile : {}),
+              }}
+            >
+              <div
+                style={{
+                  ...styles.requestList,
+                  ...(isMobile ? styles.requestListMobile : {}),
+                }}
+              >
                 {filteredRequests.length === 0 ? (
                   <p style={styles.requestEmpty}>
                     No hay solicitudes para este filtro.
@@ -1196,7 +1457,10 @@ const [centroCosto, setCentroCosto] = useState('');
                           : {}),
                       }}
                     >
-                      <div style={styles.requestCode}>{r.code}</div>
+                      <div style={styles.requestCode}>
+                        {r.trackingCode || r.code || 'SIN-CÓDIGO'}
+                          </div>
+
                       <div style={styles.requestName}>
                         {r.requesterName || 'Sin nombre'}
                       </div>
@@ -1210,7 +1474,12 @@ const [centroCosto, setCentroCosto] = useState('');
                 )}
               </div>
 
-              <div style={styles.requestDetail}>
+              <div
+                style={{
+                  ...styles.requestDetail,
+                  ...(isMobile ? styles.requestDetailMobile : {}),
+                }}
+              >
                 {selectedRequest ? (
                   <>
                     <div style={styles.requestDetailHeader}>
@@ -1219,8 +1488,9 @@ const [centroCosto, setCentroCosto] = useState('');
                           Código de seguimiento
                         </div>
                         <div style={styles.requestDetailCode}>
-                          {selectedRequest.code}
-                        </div>
+                        {selectedRequest.trackingCode || selectedRequest.code || 'SIN-CÓDIGO'}
+                          </div>
+
                       </div>
                       <div
                         style={styles.requestStatusPill(
@@ -1249,12 +1519,13 @@ const [centroCosto, setCentroCosto] = useState('');
                       </div>
 
                       <div>
-  <div style={styles.requestDetailItemLabel}>Área</div>
-  <div style={styles.requestDetailItemValue}>
-    {selectedRequest.requesterArea || selectedRequest.area || '—'}
-  </div>
-</div>
-
+                        <div style={styles.requestDetailItemLabel}>Área</div>
+                        <div style={styles.requestDetailItemValue}>
+                          {selectedRequest.requesterArea ||
+                            selectedRequest.area ||
+                            '—'}
+                        </div>
+                      </div>
 
                       <div>
                         <div style={styles.requestDetailItemLabel}>
@@ -1265,12 +1536,8 @@ const [centroCosto, setCentroCosto] = useState('');
                         </div>
                       </div>
 
-                     
-
                       <div>
-                        <div style={styles.requestDetailItemLabel}>
-                          Lugar
-                        </div>
+                        <div style={styles.requestDetailItemLabel}>Lugar</div>
                         <div style={styles.requestDetailItemValue}>
                           {selectedRequest.location || '—'}
                         </div>
@@ -1349,6 +1616,7 @@ const [centroCosto, setCentroCosto] = useState('');
                 )}
               </div>
             </div>
+
           </section>
         );
 
@@ -2187,5 +2455,77 @@ const styles = {
     alignItems: 'center',
     gap: '4px',
   },
+
+    // ------- versión mobile de solicitudes -------
+
+  requestGridMobile: {
+    gridTemplateColumns: '1fr',   // lista arriba, detalle abajo
+  },
+
+  requestListMobile: {
+    maxHeight: '220px',           // lista scrolleable pero que no ocupe todo
+    marginBottom: '12px',
+  },
+
+  requestDetailMobile: {
+    minHeight: 'auto',
+  },
+
+  requestFiltersBarMobile: {
+    width: '100%',
+    overflowX: 'auto',
+    paddingBottom: '4px',
+  },
+  paginationBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 16px',
+    borderTop: '1px solid #e5e7eb',
+    backgroundColor: '#f9fafb',
+    gap: '12px',
+  },
+  paginationInfo: {
+    fontSize: '0.8rem',
+    color: '#6b7280',
+  },
+  paginationControls: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+  },
+  paginationLabel: {
+    fontSize: '0.8rem',
+    color: '#4b5563',
+  },
+  paginationSelect: {
+    marginLeft: '6px',
+    padding: '4px 8px',
+    borderRadius: '6px',
+    border: '1px solid #d1d5db',
+    fontSize: '0.8rem',
+  },
+  paginationButtons: {
+    display: 'flex',
+    gap: '4px',
+  },
+  paginationButton: {
+  minWidth: '28px',
+  height: '28px',
+  borderRadius: '6px',
+  borderWidth: 1,            // ✅ siempre mismos props
+  borderStyle: 'solid',
+  borderColor: '#e5e7eb',
+  backgroundColor: 'white',
+  fontSize: '0.75rem',
+  cursor: 'pointer',
+},
+paginationButtonActive: {
+  backgroundColor: '#3b82f6',
+  color: 'white',
+  borderColor: '#2563eb',    // ✅ solo se sobreescribe color
+},
+
+
 
 };
