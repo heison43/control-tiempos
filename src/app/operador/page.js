@@ -491,11 +491,19 @@ function OperatorPanel({ operatorId, operatorLabel }) {
                       <h3 style={styles.activityTitle}>{assignment.activity}</h3>
                       <p style={styles.location}>📍 {assignment.location}</p>
                       {assignment.solicitadoPor && (
-                        <p style={styles.solicitadoPor}>
-                          👥 Solicitado por:{' '}
-                          <strong>{assignment.solicitadoPor}</strong>
-                        </p>
-                      )}
+  <p style={styles.solicitadoPor}>
+    👥 Solicitado por:{' '}
+    <strong>{assignment.solicitadoPor}</strong>
+  </p>
+)}
+
+{assignment.areaSolicitante && (
+  <p style={styles.solicitadoPor}>
+    🏢 Área solicitante:{' '}
+    <strong>{assignment.areaSolicitante}</strong>
+  </p>
+)}
+
                     </div>
                     <div
                       style={{

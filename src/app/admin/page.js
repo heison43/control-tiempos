@@ -33,8 +33,11 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('nueva');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-    const [cedulaSolicitante, setCedulaSolicitante] = useState('');
+  const [cedulaSolicitante, setCedulaSolicitante] = useState('');
   const [centroCosto, setCentroCosto] = useState('');
+  const [telefonoSolicitante, setTelefonoSolicitante] = useState('');
+  const [areaSolicitante, setAreaSolicitante] = useState('');
+
 
     const [linkedRequest, setLinkedRequest] = useState(null); // solicitud usada para crear asignación
 
@@ -226,17 +229,19 @@ export default function AdminPanel() {
   // ---------- Exportar CSV de solicitudes ----------
   const buildCsvFromRequests = (list) => {
     const header = [
-      'Código',
-      'Fecha creación',
-      'Estado',
-      'Solicitante',
-      'Documento',
-      'Área',
-      'Centro de costos',
-      'Lugar',
-      'Actividad',
-      'Mensaje respuesta',
-    ];
+  'Código',
+  'Fecha creación',
+  'Estado',
+  'Solicitante',
+  'Documento',
+  'Teléfono',          //  NUEVO
+  'Área',
+  'Centro de costos',
+  'Lugar',
+  'Actividad',
+  'Mensaje respuesta',
+];
+
 
     const rows = list.map((r) => {
       const createdStr = r.createdAt?.toDate
@@ -246,17 +251,19 @@ export default function AdminPanel() {
         : '';
 
           return [
-      r.trackingCode || r.code || '',
-      createdStr,
-      r.status || 'pending',
-      r.requesterName || '',
-      r.requesterId || '',
-      r.requesterArea || r.area || '',
-      r.costCenter || '',
-      r.location || '',
-      r.activity || '',
-      r.responseMessage || '',
-    ];
+  r.trackingCode || r.code || '',
+  createdStr,
+  r.status || 'pending',
+  r.requesterName || '',
+  r.requesterId || '',
+  r.contactPhone || '',                             //  NUEVO
+  r.requesterArea || r.area || '',
+  r.costCenter || '',
+  r.location || '',
+  r.activity || '',
+  r.responseMessage || '',
+];
+
 
     });
 
@@ -328,29 +335,29 @@ export default function AdminPanel() {
   };
 
       const handleUseRequestToCreateAssignment = (req) => {
-    // Nombre del solicitante
-    setSolicitadoPor(req.requesterName || '');
+  // Nombre del solicitante
+  setSolicitadoPor(req.requesterName || '');
 
-    // Actividad y lugar
-    setActivity(req.activity || '');
-    setLocation(req.location || '');
+  // Actividad y lugar
+  setActivity(req.activity || '');
+  setLocation(req.location || '');
 
-    // Cédula y centro de costo desde la solicitud
-    setCedulaSolicitante(req.requesterId || '');
-    setCentroCosto(req.costCenter || '');
+  // Cédula, centro de costo, teléfono y área desde la solicitud
+  setCedulaSolicitante(req.requesterId || '');
+  setCentroCosto(req.costCenter || '');
+  setTelefonoSolicitante(req.contactPhone || '');
+  setAreaSolicitante(req.requesterArea || req.area || '');
 
-    // Guardar datos de la solicitud para enlazarla a la asignación
-    setLinkedRequest({
-  id: req.id,
-  code: req.trackingCode || req.code || null,
-  createdAt: req.createdAt || null,
-});
+  // Guardar datos de la solicitud para enlazarla a la asignación
+  setLinkedRequest({
+    id: req.id,
+    code: req.trackingCode || req.code || null,
+    createdAt: req.createdAt || null,
+  });
 
-
-    // Cambiar a la pestaña de Asignación Rápida
-    setActiveTab('nueva');
-  };
-
+  // Cambiar a la pestaña de Asignación Rápida
+  setActiveTab('nueva');
+};
 
 
 
@@ -421,20 +428,23 @@ export default function AdminPanel() {
     const nowTs = serverTimestamp();
 
     const data = {
-      operatorId: selectedOperator,
-      equipmentId: selectedEquipment || null,
-      activity: activity.trim(),
-      location: location.trim(),
-      solicitadoPor: solicitadoPor.trim(),
-      cedulaSolicitante: cedulaSolicitante.trim() || null,
-      centroCosto: centroCosto.trim() || null,
-      status: 'pendiente',
-      createdAt: nowTs,
-      startTime: null,
-      endTime: null,
-      durationMinutes: null,
-      evidences: [],
-    };
+  operatorId: selectedOperator,
+  equipmentId: selectedEquipment || null,
+  activity: activity.trim(),
+  location: location.trim(),
+  solicitadoPor: solicitadoPor.trim(),
+  cedulaSolicitante: cedulaSolicitante.trim() || null,
+  centroCosto: centroCosto.trim() || null,
+  telefonoSolicitante: telefonoSolicitante.trim() || null,   //  NUEVO
+  areaSolicitante: areaSolicitante.trim() || null,           //  NUEVO
+  status: 'pendiente',
+  createdAt: nowTs,
+  startTime: null,
+  endTime: null,
+  durationMinutes: null,
+  evidences: [],
+};
+
 
     // 👉 Si viene de una solicitud externa, usamos la fecha/código de esa solicitud
     if (linkedRequest) {
@@ -452,14 +462,17 @@ export default function AdminPanel() {
     await addDoc(collection(db, 'assignments'), data);
 
     // Limpiar formulario
-    setActivity('');
-    setLocation('');
-    setSolicitadoPor('');
-    setCedulaSolicitante('');
-    setCentroCosto('');
-    setSelectedOperator('');
-    setSelectedEquipment('');
-    setLinkedRequest(null); // limpiamos el enlace con la solicitud
+     setActivity('');
+     setLocation('');
+     setSolicitadoPor('');
+     setCedulaSolicitante('');
+     setCentroCosto('');
+     setTelefonoSolicitante('');    // NUEVO
+     setAreaSolicitante('');        // NUEVO
+     setSelectedOperator('');
+     setSelectedEquipment('');
+     setLinkedRequest(null);
+
   };
 
 
@@ -468,24 +481,27 @@ export default function AdminPanel() {
   // ---------- Exportar CSV ----------
       const buildCsvFromAssignments = (list) => {
     const header = [
-      'Fecha solicitud',
-      'Hora solicitud',
-      'Fecha creación',
-      'Hora creación',
-      'Operador',
-      'Equipo',
-      'Actividad',
-      'Solicitado por',
-      'Cédula solicitante',
-      'Centro de costos',
-      'Lugar',
-      'Estado',
-      'Código solicitud',
-      'Inicio',
-      'Fin',
-      'Duración (min)',
-      'Notas',
-    ];
+  'Fecha solicitud',
+  'Hora solicitud',
+  'Fecha creación',
+  'Hora creación',
+  'Operador',
+  'Equipo',
+  'Actividad',
+  'Solicitado por',
+  'Teléfono solicitante',
+  'Cédula solicitante',
+  'Área solicitante',
+  'Centro de costos',
+  'Lugar',
+  'Estado',
+  'Código solicitud',
+  'Inicio',
+  'Fin',
+  'Duración (min)',
+  'Notas',
+];
+
 
     const rows = list.map((a) => {
       const opName = operatorMap[a.operatorId] || a.operatorId || '';
@@ -553,24 +569,27 @@ export default function AdminPanel() {
           : '';
 
       return [
-        reqDateStr,
-        reqTimeStr,
-        createdDateStr,
-        createdTimeStr,
-        opName,
-        eqName,
-        a.activity || '',
-        a.solicitadoPor || '',
-        a.cedulaSolicitante || '',
-        a.centroCosto || '',
-        a.location || '',
-        a.status || '',
-        a.requestCode || '',
-        startStr,
-        endStr,
-        a.durationMinutes ?? '',
-        evidences,
-      ];
+  reqDateStr,
+  reqTimeStr,
+  createdDateStr,
+  createdTimeStr,
+  opName,
+  eqName,
+  a.activity || '',
+  a.solicitadoPor || '',
+  a.telefonoSolicitante || '',
+  a.cedulaSolicitante || '',
+  a.areaSolicitante || '',
+  a.centroCosto || '',
+  a.location || '',
+  a.status || '',
+  a.requestCode || '',
+  startStr,
+  endStr,
+  a.durationMinutes ?? '',
+  evidences,
+];
+
     });
 
     return [header, ...rows]
@@ -869,6 +888,17 @@ export default function AdminPanel() {
 </div>
 
 <div style={styles.formGroup}>
+  <label style={styles.label}>📞 Teléfono solicitante</label>
+  <input
+    type="text"
+    value={telefonoSolicitante}
+    onChange={(e) => setTelefonoSolicitante(e.target.value)}
+    placeholder="Ej: 3001234567"
+    style={styles.input}
+  />
+</div>
+
+<div style={styles.formGroup}>
   <label style={styles.label}>🏷 Centro de costos</label>
   <input
     type="text"
@@ -878,6 +908,18 @@ export default function AdminPanel() {
     style={styles.input}
   />
 </div>
+
+<div style={styles.formGroup}>
+  <label style={styles.label}>🏢 Área solicitante</label>
+  <input
+    type="text"
+    value={areaSolicitante}
+    onChange={(e) => setAreaSolicitante(e.target.value)}
+    placeholder="Ej: Obras civiles, Mantenimiento..."
+    style={styles.input}
+  />
+</div>
+
 
 
                 <div style={styles.formGroup}>
@@ -1054,33 +1096,34 @@ export default function AdminPanel() {
                 >
                   <table style={styles.table}>
                                         <thead>
-                      <tr>
-                        {[
-                          'Fecha solicitud',
-                          'Hora solicitud',
-                          'Fecha creación',
-                          'Hora creación',
-                          'Operador',
-                          'Equipo',
-                          'Actividad',
-                          'Solicitado por',
-                          'Cédula',
-                          'Centro de costos',
-                          'Lugar',
-                          'Estado',
-                          'Código solicitud',
-                          'Inicio',
-                          'Fin',
-                          'Duración',
-                          'Notas',
-                        ].map((t) => (
-                          <th key={t} style={styles.th}>
-                            {t}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-
+  <tr>
+    {[
+      'Fecha solicitud',
+      'Hora solicitud',
+      'Fecha creación',
+      'Hora creación',
+      'Operador',
+      'Equipo',
+      'Actividad',
+      'Solicitado por',
+      'Teléfono',
+      'Cédula',
+      'Área',
+      'Centro de costos',
+      'Lugar',
+      'Estado',
+      'Código solicitud',
+      'Inicio',
+      'Fin',
+      'Duración',
+      'Notas',
+    ].map((t) => (
+      <th key={t} style={styles.th}>
+        {t}
+      </th>
+    ))}
+  </tr>
+</thead>
 
 
 
@@ -1145,31 +1188,50 @@ export default function AdminPanel() {
                             </td>
 
                             {/* Solicitado por */}
-                            <td style={styles.td}>
-                              <div style={styles.solicitadoCell}>
-                                <span style={styles.solicitadoText}>
-                                  {a.solicitadoPor || '-'}
-                                </span>
-                              </div>
-                            </td>
+<td style={styles.td}>
+  <div style={styles.solicitadoCell}>
+    <span style={styles.solicitadoText}>
+      {a.solicitadoPor || '-'}
+    </span>
+  </div>
+</td>
 
-                            {/* Cédula solicitante */}
-                            <td style={styles.td}>
-                              <div style={styles.solicitadoCell}>
-                                <span style={styles.solicitadoText}>
-                                  {a.cedulaSolicitante || '—'}
-                                </span>
-                              </div>
-                            </td>
+{/* Teléfono solicitante */}
+<td style={styles.td}>
+  <div style={styles.solicitadoCell}>
+    <span style={styles.solicitadoText}>
+      {a.telefonoSolicitante || '—'}
+    </span>
+  </div>
+</td>
 
-                            {/* Centro de costos */}
-                            <td style={styles.td}>
-                              <div style={styles.solicitadoCell}>
-                                <span style={styles.solicitadoText}>
-                                  {a.centroCosto || '—'}
-                                </span>
-                              </div>
-                            </td>
+{/* Cédula solicitante */}
+<td style={styles.td}>
+  <div style={styles.solicitadoCell}>
+    <span style={styles.solicitadoText}>
+      {a.cedulaSolicitante || '—'}
+    </span>
+  </div>
+</td>
+
+{/* Área solicitante */}
+<td style={styles.td}>
+  <div style={styles.solicitadoCell}>
+    <span style={styles.solicitadoText}>
+      {a.areaSolicitante || '—'}
+    </span>
+  </div>
+</td>
+
+{/* Centro de costos */}
+<td style={styles.td}>
+  <div style={styles.solicitadoCell}>
+    <span style={styles.solicitadoText}>
+      {a.centroCosto || '—'}
+    </span>
+  </div>
+</td>
+
 
                             {/* Lugar */}
                             <td style={styles.td}>
@@ -1506,52 +1568,61 @@ export default function AdminPanel() {
                     </div>
 
                     <div style={styles.requestDetailBody}>
-                      <div>
-                        <div style={styles.requestDetailItemLabel}>
-                          Solicitante
-                        </div>
-                        <div style={styles.requestDetailItemValue}>
-                          {selectedRequest.requesterName || '—'}
-                          {selectedRequest.requesterId
-                            ? ` • C.C. ${selectedRequest.requesterId}`
-                            : ''}
-                        </div>
-                      </div>
+  <div>
+    <div style={styles.requestDetailItemLabel}>
+      Solicitante
+    </div>
+    <div style={styles.requestDetailItemValue}>
+      {selectedRequest.requesterName || '—'}
+      {selectedRequest.requesterId
+        ? ` • C.C. ${selectedRequest.requesterId}`
+        : ''}
+    </div>
+  </div>
 
-                      <div>
-                        <div style={styles.requestDetailItemLabel}>Área</div>
-                        <div style={styles.requestDetailItemValue}>
-                          {selectedRequest.requesterArea ||
-                            selectedRequest.area ||
-                            '—'}
-                        </div>
-                      </div>
+  <div>
+  <div style={styles.requestDetailItemLabel}>Teléfono</div>
+  <div style={styles.requestDetailItemValue}>
+    {selectedRequest.contactPhone || '—'}
+  </div>
+</div>
 
-                      <div>
-                        <div style={styles.requestDetailItemLabel}>
-                          Centro de costos
-                        </div>
-                        <div style={styles.requestDetailItemValue}>
-                          {selectedRequest.costCenter || '—'}
-                        </div>
-                      </div>
 
-                      <div>
-                        <div style={styles.requestDetailItemLabel}>Lugar</div>
-                        <div style={styles.requestDetailItemValue}>
-                          {selectedRequest.location || '—'}
-                        </div>
-                      </div>
+  <div>
+    <div style={styles.requestDetailItemLabel}>Área</div>
+    <div style={styles.requestDetailItemValue}>
+      {selectedRequest.requesterArea ||
+        selectedRequest.area ||
+        '—'}
+    </div>
+  </div>
 
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <div style={styles.requestDetailItemLabel}>
-                          Actividad solicitada
-                        </div>
-                        <div style={styles.requestDetailItemValue}>
-                          {selectedRequest.activity || '—'}
-                        </div>
-                      </div>
-                    </div>
+  <div>
+    <div style={styles.requestDetailItemLabel}>
+      Centro de costos
+    </div>
+    <div style={styles.requestDetailItemValue}>
+      {selectedRequest.costCenter || '—'}
+    </div>
+  </div>
+
+  <div>
+    <div style={styles.requestDetailItemLabel}>Lugar</div>
+    <div style={styles.requestDetailItemValue}>
+      {selectedRequest.location || '—'}
+    </div>
+  </div>
+
+  <div style={{ gridColumn: '1 / -1' }}>
+    <div style={styles.requestDetailItemLabel}>
+      Actividad solicitada
+    </div>
+    <div style={styles.requestDetailItemValue}>
+      {selectedRequest.activity || '—'}
+    </div>
+  </div>
+</div>
+
 
                     {selectedRequest.responseMessage && (
                       <div style={styles.requestDetailMessageBox}>
@@ -2525,7 +2596,6 @@ paginationButtonActive: {
   color: 'white',
   borderColor: '#2563eb',    // ✅ solo se sobreescribe color
 },
-
 
 
 };
