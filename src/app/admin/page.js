@@ -17,6 +17,8 @@ import ManageBasicData from '../admin/ManageBasicData';
 import ManageAssignments from '../admin/ManageAssignments';
 import HistorialPage from '../historial/page';
 import ManageAdmins from '../admin/ManageAdmins';
+import ManageEquipmentLoans from '../admin/ManageEquipmentLoans';
+
 
 export default function AdminPanel() {
   const [operators, setOperators] = useState([]);
@@ -132,17 +134,19 @@ export default function AdminPanel() {
     let filtered = assignments;
 
     if (
-      activeTab !== 'todas' &&
-      activeTab !== 'nueva' &&
-      activeTab !== 'gestion' &&
-      activeTab !== 'equipos' &&
-      activeTab !== 'catalogos' &&
-      activeTab !== 'solicitudes' &&
-      activeTab !== 'admins' &&
-      activeTab !== 'historial'
-    ) {
-      filtered = filtered.filter((a) => a.status === activeTab);
-    }
+  activeTab !== 'todas' &&
+  activeTab !== 'nueva' &&
+  activeTab !== 'gestion' &&
+  activeTab !== 'equipos' &&
+  activeTab !== 'prestamos' &&      //  NUEVO
+  activeTab !== 'catalogos' &&
+  activeTab !== 'solicitudes' &&
+  activeTab !== 'admins' &&
+  activeTab !== 'historial'
+) {
+  filtered = filtered.filter((a) => a.status === activeTab);
+}
+
 
     if (startDate || endDate) {
       const start = startDate
@@ -1691,6 +1695,32 @@ export default function AdminPanel() {
           </section>
         );
 
+    case 'prestamos':
+      return (
+        <section
+          style={{ ...styles.card, ...(isMobile ? styles.cardMobile : {}) }}
+        >
+          <div
+            style={{
+              ...styles.cardHeader,
+              ...(isMobile ? styles.cardHeaderMobile : {}),
+              marginBottom: 16,
+            }}
+          >
+            <div>
+              <h2 style={styles.cardTitle}>🚛 Préstamos de equipo</h2>
+              <p style={styles.cardSubtitle}>
+                Gestiona solicitudes de préstamo: aprobación, entrega,
+                devolución y registro histórico.
+              </p>
+            </div>
+          </div>
+
+          {/* Aquí dentro ya se pinta tu módulo de préstamos */}
+          <ManageEquipmentLoans />
+        </section>
+      );
+
       case 'gestion':
         return <ManageAssignments />;
 
@@ -1732,6 +1762,7 @@ export default function AdminPanel() {
         );
 
       default:
+        
         return null;
     }
   };
@@ -1795,6 +1826,7 @@ export default function AdminPanel() {
           {[
             { id: 'nueva', label: '➕ Asignaciones' },
             { id: 'solicitudes', label: '📨 Solicitudes' },
+              { id: 'prestamos', label: '🚛 Préstamo de equipos' },
             { id: 'gestion', label: '📋 Gestionar Asignaciones' },
             { id: 'equipos', label: '🚜 Asignación de Equipos' },
             { id: 'catalogos', label: '👥 Crear Operadores/Equipos' },

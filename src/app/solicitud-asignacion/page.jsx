@@ -1,5 +1,5 @@
     'use client';
-
+     import Link from 'next/link'; //  NUEVO
     import { useState, useEffect } from 'react';
     import { db } from '../../firebaseConfig';
     import {
@@ -221,21 +221,29 @@
         '';
 
     return (
-        <div className="page">
-        <div className="content">
-            {/* ENCABEZADO */}
-            <header className="header">
-            <div className="header__icon">
-                <span className="header__icon-rocket">🚚</span>
-            </div>
-            <div>
-                <h1 className="header__title">Solicitud de Asignación de Equipos</h1>
-                <p className="header__subtitle">
-                Formulario de Solicitud de Movimientos y Actividades con Equipos en
-                Almacén.
-                </p>
-            </div>
-            </header>
+  <div className="page">
+    <div className="content">
+
+      <Link href="/solicitudes" className="back-link">
+        <span className="back-link__icon">←</span>
+        <span>Volver al menú de solicitudes</span>
+      </Link>
+
+
+
+      {/* ENCABEZADO */}
+      <header className="header">
+        <div className="header__icon">
+          <span className="header__icon-rocket">🚚</span>
+        </div>
+        <div>
+          <h1 className="header__title">Solicitud de Asignación de Equipos</h1>
+          <p className="header__subtitle">
+            Formulario de Solicitud de Movimientos y Actividades con Equipos en
+            Almacén.
+          </p>
+        </div>
+      </header>
 
             {/* DOS TARJETAS: FORM + CONSULTA */}
             <main className="main-grid">
@@ -528,6 +536,10 @@
             color: #cbd5f5;
             max-width: 680px;
             }
+
+   
+
+
 
             .main-grid {
             display: grid;
@@ -920,7 +932,41 @@
                 font-size: 0.85rem;
             }
             }
+
+
         `}</style>
+        
+{/* ESTILOS ESPECÍFICOS DEL LINK VOLVER */}
+        <style jsx global>{`
+          .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 16px;
+
+            font-size: 0.9rem;
+            color: #ffffff;
+            text-decoration: none;
+
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(148, 163, 184, 0.6);
+          }
+
+          .back-link__icon {
+            font-size: 1rem;
+          }
+
+          .back-link:hover {
+            color: #e0f2fe;
+            background: rgba(15, 23, 42, 0.9);
+            border-color: #38bdf8;
+            text-decoration: none;
+          }
+        `}</style>
+
+
         </div>
     );
     }
