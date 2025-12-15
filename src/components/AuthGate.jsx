@@ -23,8 +23,26 @@ export default function AuthGate({ children }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // 🔐 Rutas protegidas (requieren sesión)
+  const protectedRoutes = ['/admin', '/operador', '/historial'];
+
+  // 🌐 Rutas públicas (portal de solicitudes)
+  const publicRoutes = [
+    '/solicitudes',
+    '/solicitud-asignacion',
+    '/prestamo-equipo',
+  ];
+
+  const isProtectedRoute = protectedRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+  const isPublicRoute = publicRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+  const isLoginPage = pathname === '/';
+
   // ✅ Lógica central: obtener/crear usuario + rol en Firestore
-   const checkUserAuthorization = async (user) => {
+  const checkUserAuthorization = async (user) => {
     if (!user?.email) {
       console.log('❌ No hay email de usuario');
       return false;
@@ -84,7 +102,9 @@ export default function AuthGate({ children }) {
       }
 
       // 3️⃣ Si no está en users, intentamos asociarlo a un operador
-      console.log('ℹ️ Usuario no existe en users, buscando en operators.authEmail...');
+      console.log(
+        'ℹ️ Usuario no existe en users, buscando en operators.authEmail...'
+      );
       const opsRef = collection(db, 'operators');
       const q = query(opsRef, where('authEmail', '==', email));
       const opsSnap = await getDocs(q);
@@ -92,10 +112,13 @@ export default function AuthGate({ children }) {
       if (!opsSnap.empty) {
         const opDoc = opsSnap.docs[0];
         const opData = opDoc.data();
-        console.log('✅ Coincidencia encontrada en operators para este correo:', {
-          operatorId: opDoc.id,
-          ...opData,
-        });
+        console.log(
+          '✅ Coincidencia encontrada en operators para este correo:',
+          {
+            operatorId: opDoc.id,
+            ...opData,
+          }
+        );
 
         await setDoc(userRef, {
           email,
@@ -110,14 +133,15 @@ export default function AuthGate({ children }) {
         return 'operator';
       }
 
-      console.log('❌ Usuario no encontrado en admins, users ni operators. No autorizado.');
+      console.log(
+        '❌ Usuario no encontrado en admins, users ni operators. No autorizado.'
+      );
       return false;
     } catch (error) {
       console.error('💥 Error verificando autorización:', error);
       return false;
     }
   };
-
 
   // Manejar login con Google (cuenta predeterminada)
   const handleGoogleLogin = async () => {
@@ -171,25 +195,42 @@ export default function AuthGate({ children }) {
 
   // Efecto principal - escuchar cambios de autenticación
   useEffect(() => {
-    console.log('🔧 Iniciando AuthGate...');
+    console.log('🔧 Iniciando AuthGate... Ruta actual:', pathname);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       console.log('🔄 Cambio de estado auth:', user ? user.email : 'No user');
 
-      if (user) {
-        const role = await checkUserAuthorization(user);
+      // 👉 No hay usuario
+      if (!user) {
+        console.log('👤 No hay usuario autenticado');
 
-        if (role) {
-          console.log('✅ Usuario autenticado y autorizado');
-          if (pathname === '/') {
-            router.push(role === 'admin' ? '/admin' : '/operador');
-          }
-        } else {
-          console.log('🚫 Usuario no autorizado, cerrando sesión');
-          await signOut(auth);
+        // Si intenta entrar a una ruta protegida sin sesión → mandamos al login
+        if (isProtectedRoute) {
+          router.push('/');
+        }
+
+        setLoading(false);
+        return;
+      }
+
+      // 👉 Sí hay usuario
+      const role = await checkUserAuthorization(user);
+
+      if (role) {
+        console.log('✅ Usuario autenticado y autorizado con rol:', role);
+
+        // Si está en "/" (pantalla de login), lo redirigimos a su panel
+        if (isLoginPage) {
+          router.push(role === 'admin' ? '/admin' : '/operador');
         }
       } else {
-        console.log('👤 No hay usuario autenticado');
+        console.log('🚫 Usuario no autorizado, cerrando sesión');
+        await signOut(auth);
+
+        // Si estaba en una ruta protegida o en "/" lo devolvemos al login limpio
+        if (isProtectedRoute || isLoginPage) {
+          router.push('/');
+        }
       }
 
       setLoading(false);
@@ -199,10 +240,15 @@ export default function AuthGate({ children }) {
       console.log('🧹 Limpiando AuthGate');
       unsubscribe();
     };
-  }, [router, pathname]);
+  }, [router, pathname, isProtectedRoute, isLoginPage]);
 
   // Loading
   if (loading) {
+    // En rutas públicas no bloqueamos la UI con loading
+    if (isPublicRoute && !isLoginPage && !isProtectedRoute) {
+      return children;
+    }
+
     return (
       <div className="loading-container">
         <div className="loading-dots">
@@ -214,8 +260,11 @@ export default function AuthGate({ children }) {
     );
   }
 
-  // Si no hay usuario, mostrar pantalla de login
-  if (!auth.currentUser) {
+  // 🧷 Si NO hay usuario:
+  // - y estamos en "/" (login)  → mostramos pantalla de login
+  // - o estamos en ruta protegida → también login
+  // - pero si es ruta pública (/solicitudes, etc.) → dejamos pasar al portal
+  if (!auth.currentUser && (isLoginPage || isProtectedRoute)) {
     return (
       <div className="login-container">
         <div className="login-card">
@@ -235,15 +284,13 @@ export default function AuthGate({ children }) {
               </svg>
             </div>
             <h1 className="login-title">Control de Tiempos</h1>
-            <p className="login-subtitle">Sistema de control</p>
+            <p className="login-subtitle">
+              Sistema de control para equipos, operadores y solicitudes.
+            </p>
           </div>
 
           {/* Contenido */}
           <div className="login-content">
-            <h2 className="login-form-title">Iniciar Sesión</h2>
-            <p className="login-form-subtitle">Accede con tu cuenta de acceso</p>
-
-            {/* Botón principal - Cuenta predeterminada */}
             <button className="google-login-btn" onClick={handleGoogleLogin}>
               <svg className="google-icon" viewBox="0 0 24 24">
                 <path
@@ -266,14 +313,12 @@ export default function AuthGate({ children }) {
               Continuar con Google
             </button>
 
-            {/* Separador */}
             <div className="flex items-center my-6">
               <div className="flex-1 border-t border-gray-300"></div>
               <span className="px-3 text-sm text-gray-500">o</span>
               <div className="flex-1 border-t border-gray-300"></div>
             </div>
 
-            {/* Botón secundario - Seleccionar cuenta */}
             <button
               className="google-login-btn"
               onClick={handleGoogleLoginWithAccountChooser}
@@ -319,9 +364,11 @@ export default function AuthGate({ children }) {
                   />
                 </svg>
                 <div className="security-text">
-                  <p className="security-title">Acceso seguro</p>
+                  <p className="security-title">Acceso exclusivo para personal autorizado.</p>
                   <p className="security-description">
-                    Solo personal autorizado puede acceder al sistema
+                    El portal de solicitudes público está disponible en:
+                    <br />
+                    <span style={{ fontWeight: 600 }}>/solicitudes</span>
                   </p>
                 </div>
               </div>
@@ -337,6 +384,7 @@ export default function AuthGate({ children }) {
     );
   }
 
+  // ✅ Usuario autenticado → renderizamos app normalmente
   console.log('🎊 Renderizando aplicación para usuario:', auth.currentUser?.email);
   return children;
 }
