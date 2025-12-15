@@ -8,7 +8,9 @@ import {
   deleteDoc,
   updateDoc,
   doc,
-  onSnapshot
+  onSnapshot,
+  setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 
 import {
@@ -18,6 +20,15 @@ import {
   PencilSquareIcon,
   XMarkIcon
 } from "@heroicons/react/24/outline";
+
+/* ---------------- HELPERS ---------------- */
+function normEmail(v) {
+  return (v || "").trim().toLowerCase();
+}
+
+function normOpId(v) {
+  return (v || "").trim().toUpperCase(); // OP003
+}
 
 export default function ManageBasicData() {
   const [open, setOpen] = useState(false);
@@ -29,7 +40,7 @@ export default function ManageBasicData() {
   // Crear operador
   const [opName, setOpName] = useState("");
   const [opCode, setOpCode] = useState("");
-  const [opEmail, setOpEmail] = useState(""); // 👈 NUEVO
+  const [opEmail, setOpEmail] = useState("");
 
   // Crear equipo
   const [eqName, setEqName] = useState("");
@@ -39,7 +50,7 @@ export default function ManageBasicData() {
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState("");
   const [editCode, setEditCode] = useState("");
-  const [editEmail, setEditEmail] = useState(""); // 👈 NUEVO
+  const [editEmail, setEditEmail] = useState("");
 
   useEffect(() => {
     const unsubOps = onSnapshot(collection(db, "operators"), (snap) =>
@@ -56,27 +67,61 @@ export default function ManageBasicData() {
     };
   }, []);
 
-  // Crear operador
+  /* ---------------- OPERATORS (FIX) ----------------
+     ✅ operators/{OP003} (ID = código)
+     ✅ users/{email} creado/actualizado para login
+  */
   const createOperator = async () => {
-    if (!opName.trim()) return alert("Ingresa un nombre");
+    const name = opName.trim();
+    const operatorId = normOpId(opCode);
+    const email = normEmail(opEmail);
 
-    await addDoc(collection(db, "operators"), {
-      name: opName.trim(),
-      codigo: opCode.trim(),
-      authEmail: opEmail.trim() ? opEmail.trim().toLowerCase() : null, // 👈 NUEVO
-    });
+    if (!name) return alert("Ingresa un nombre");
+    if (!operatorId) return alert("Ingresa un código (ej: OP003)");
+    if (!email) return alert("Ingresa el correo de acceso");
+
+    // 1) operators/{OP003}
+    await setDoc(
+      doc(db, "operators", operatorId),
+      {
+        name,
+        codigo: operatorId,
+        authEmail: email,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    // 2) users/{email}
+    await setDoc(
+      doc(db, "users", email),
+      {
+        email,
+        role: "operator",
+        operatorId, // OP003
+        isActive: true,
+        name,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
     setOpName("");
     setOpCode("");
-    setOpEmail(""); // 👈 limpiar
+    setOpEmail("");
   };
 
-  // Crear equipo
+  // Crear equipo (puede seguir con addDoc normal)
   const createEquipment = async () => {
     if (!eqName.trim()) return alert("Ingresa un nombre");
     await addDoc(collection(db, "equipment"), {
       name: eqName.trim(),
       codigo: eqCode.trim(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
     setEqName("");
     setEqCode("");
@@ -97,34 +142,63 @@ export default function ManageBasicData() {
   // Abrir modal de edición
   const enableEdit = (item, type) => {
     setEditing({ ...item, type });
-    setEditName(item.name);
-    setEditCode(item.codigo || "");
-    setEditEmail(item.authEmail || ""); // 👈 NUEVO
+    setEditName(item.name || "");
+    setEditCode(item.codigo || item.id || ""); // si no trae codigo, mostramos el id
+    setEditEmail(item.authEmail || "");
   };
 
   // Guardar edición
   const saveEdit = async () => {
-    const ref = doc(
-      db,
-      editing.type === "op" ? "operators" : "equipment",
-      editing.id
-    );
+    if (!editing) return;
 
-    const payload =
-      editing.type === "op"
-        ? {
-            name: editName.trim(),
-            codigo: editCode.trim(),
-            authEmail: editEmail.trim()
-              ? editEmail.trim().toLowerCase()
-              : null,
-          }
-        : {
-            name: editName.trim(),
-            codigo: editCode.trim(),
-          };
+    const isOp = editing.type === "op";
+    const name = editName.trim();
+    const code = normOpId(editCode);
+    const email = normEmail(editEmail);
 
-    await updateDoc(ref, payload);
+    if (!name) return alert("Ingresa un nombre");
+
+    if (isOp) {
+      // ✅ IMPORTANTE: NO cambiar el ID del operador.
+      // El doc ID debe ser OPxxx (editing.id). Solo actualizamos datos.
+      const ref = doc(db, "operators", editing.id);
+
+      await updateDoc(ref, {
+        name,
+        authEmail: email || null,
+        updatedAt: serverTimestamp(),
+      });
+
+      // sincronizar users/{email} si hay correo
+      if (email) {
+        await setDoc(
+          doc(db, "users", email),
+          {
+            email,
+            role: "operator",
+            operatorId: editing.id, // OP003 real
+            isActive: true,
+            name,
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      setEditing(null);
+      return;
+    }
+
+    // equipment sí puede actualizar código normal
+    const ref = doc(db, "equipment", editing.id);
+
+    await updateDoc(ref, {
+      name,
+      codigo: code,
+      updatedAt: serverTimestamp(),
+    });
+
     setEditing(null);
   };
 
@@ -181,7 +255,7 @@ export default function ManageBasicData() {
                       style={input}
                     />
                     <input
-                      placeholder="Código"
+                      placeholder="Código (OP001)"
                       value={opCode}
                       onChange={(e) => setOpCode(e.target.value)}
                       style={input}
@@ -198,11 +272,11 @@ export default function ManageBasicData() {
                   </div>
 
                   {/* Lista */}
-                  <div style={listContainer}> {/* ⭐ NUEVO CONTENEDOR SCROLL */}
+                  <div style={listContainer}>
                     {operators.map((op) => (
                       <div key={op.id} style={item}>
                         <div>
-                          {op.name} {op.codigo && `(${op.codigo})`}
+                          {op.name} {(op.codigo || op.id) && ` (${op.codigo || op.id})`}
                           {op.authEmail && (
                             <div style={{ fontSize: 12, color: "#4b5563" }}>
                               📧 {op.authEmail}
@@ -247,7 +321,7 @@ export default function ManageBasicData() {
                     </button>
                   </div>
 
-                  <div style={listContainer}> {/* ⭐ MISMO CONTENEDOR */}
+                  <div style={listContainer}>
                     {equipment.map((eq) => (
                       <div key={eq.id} style={item}>
                         <div>
@@ -281,12 +355,27 @@ export default function ManageBasicData() {
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     style={input}
+                    placeholder="Nombre"
                   />
+
+                  {/* Código: para operadores NO se puede cambiar (para no romper el ID) */}
                   <input
                     value={editCode}
                     onChange={(e) => setEditCode(e.target.value)}
-                    style={input}
+                    style={{
+                      ...input,
+                      opacity: editing.type === "op" ? 0.6 : 1,
+                      cursor: editing.type === "op" ? "not-allowed" : "text",
+                    }}
+                    disabled={editing.type === "op"}
+                    placeholder="Código"
+                    title={
+                      editing.type === "op"
+                        ? "No se puede cambiar el código del operador (es el ID del documento)"
+                        : "Código"
+                    }
                   />
+
                   {editing.type === "op" && (
                     <input
                       placeholder="Correo de acceso"
@@ -344,9 +433,9 @@ const overlay = {
 };
 
 const modal = {
-  width: "94%",              // ⭐ un poco más ancho en pantallas chicas
-  maxWidth: 700,             // ⭐ un pelín más grande
-  maxHeight: "90vh",         // ⭐ para evitar que se salga de la pantalla
+  width: "94%",
+  maxWidth: 700,
+  maxHeight: "90vh",
   overflow: "hidden",
   background: "#fff",
   padding: 24,
@@ -386,7 +475,6 @@ const tabActive = {
   color: "#fff",
 };
 
-// ⭐ ahora los inputs pueden saltar a otra línea
 const formRow = {
   display: "flex",
   gap: 10,
@@ -396,7 +484,7 @@ const formRow = {
 };
 
 const input = {
-  flex: "1 1 150px",   // ⭐ base 150px, se adapta al ancho disponible
+  flex: "1 1 150px",
   minWidth: 0,
   padding: "10px 14px",
   borderRadius: 8,
@@ -426,7 +514,6 @@ const item = {
   alignItems: "center",
 };
 
-// ⭐ contenedor scroll para listas largas
 const listContainer = {
   marginTop: 4,
   maxHeight: 320,

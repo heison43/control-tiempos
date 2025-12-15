@@ -120,23 +120,42 @@ export default function AuthGate({ children }) {
           }
         );
 
-        await setDoc(userRef, {
-          email,
-          role: 'operator',
-          operatorId: opDoc.id,
-          isActive: true,
-          name: opData.name || user.displayName || email,
-          createdAt: serverTimestamp(),
-        });
+        await setDoc(
+          userRef,
+          {
+            email,
+            role: 'operator',
+            operatorId: opDoc.id,
+            isActive: true,
+            name: opData.name || user.displayName || email,
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
 
-        console.log('🆕 Usuario creado en users como operator');
+        console.log('🆕 Usuario creado en users como operator (según operators)');
         return 'operator';
       }
 
+      // 4️⃣ 🔧 MODO PRUEBAS: si no está en ningún lado, lo registramos como operador
       console.log(
-        '❌ Usuario no encontrado en admins, users ni operators. No autorizado.'
+        '⚠️ Usuario no encontrado en admins/users/operators. Registrando como operator (modo pruebas).'
       );
-      return false;
+
+      await setDoc(
+        userRef,
+        {
+          email,
+          role: 'operator',
+          isActive: true,
+          name: user.displayName || email,
+          createdAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      console.log('🆕 Usuario creado en users como operator (fallback pruebas)');
+      return 'operator';
     } catch (error) {
       console.error('💥 Error verificando autorización:', error);
       return false;
@@ -364,7 +383,9 @@ export default function AuthGate({ children }) {
                   />
                 </svg>
                 <div className="security-text">
-                  <p className="security-title">Acceso exclusivo para personal autorizado.</p>
+                  <p className="security-title">
+                    Acceso exclusivo para personal autorizado.
+                  </p>
                   <p className="security-description">
                     El portal de solicitudes público está disponible en:
                     <br />
