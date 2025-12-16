@@ -90,7 +90,7 @@ export async function POST(request) {
     const completed = data.filter((a) => a.status === "finalizado").length;
 
     const mailOptions = {
-      from: `"Sistema de Control" <${process.env.EMAIL_USER}>`,
+      from: `"Sistema de Gestión de Equipos" <${process.env.EMAIL_USER}>`,
       to: email || "heisonyepes43@outlook.com",
       subject: `📊 Reporte Exportado - ${now.toLocaleDateString("es-CO")}`,
       html: `

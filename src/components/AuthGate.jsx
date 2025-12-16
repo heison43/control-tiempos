@@ -297,7 +297,7 @@ return false;
             </div>
             <h1 className="login-title">Gestión de Equipos</h1>
             <p className="login-subtitle">
-              Sistema de control para equipos, operadores y solicitudes.
+              Gestión integral de equipos, operadores y solicitudes.
             </p>
           </div>
 

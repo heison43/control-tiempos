@@ -137,7 +137,7 @@ export default function HomePage() {
             <span>⏱️</span>
           </div>
           <h1>Gestión de Equipos</h1>
-          <p>Sistema de control para equipos, operadores y solicitudes.</p>
+          <p>Gestión integral de equipos, operadores y solicitudes..</p>
         </div>
 
         <div className="login-actions">
