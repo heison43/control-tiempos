@@ -88,7 +88,7 @@ header.bg-white.border-b.border-gray-200
   > div.max-w-7xl.mx-auto.px-3
   > div.flex.justify-between.items-center.h-10
   > div.flex.items-center.space-x-2::after {
-  content: "| Panel de Control";
+  content: "| Gestión de Equipos";
   font-size: 13px;
   color: #4b5563;
   font-weight: 500;

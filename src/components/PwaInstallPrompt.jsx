@@ -74,7 +74,7 @@ export default function PwaInstallPrompt() {
     >
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>
-          📲 Instalar Control Tiempos
+          📲 Instalar Gestión de Equipos
         </div>
         <div
           style={{

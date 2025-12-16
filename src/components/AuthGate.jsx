@@ -77,7 +77,7 @@ export default function AuthGate({ children }) {
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           },
-          { merge: true } // no borra nada existente
+          { merge: true }
         );
 
         console.log('✅ Admin autorizado (según admins)');
@@ -101,7 +101,7 @@ export default function AuthGate({ children }) {
         return userData.role;
       }
 
-      // 3️⃣ Si no está en users, intentamos asociarlo a un operador
+            // 3️⃣ Si no está en users, intentamos asociarlo a un operador
       console.log(
         'ℹ️ Usuario no existe en users, buscando en operators.authEmail...'
       );
@@ -112,13 +112,7 @@ export default function AuthGate({ children }) {
       if (!opsSnap.empty) {
         const opDoc = opsSnap.docs[0];
         const opData = opDoc.data();
-        console.log(
-          '✅ Coincidencia encontrada en operators para este correo:',
-          {
-            operatorId: opDoc.id,
-            ...opData,
-          }
-        );
+        console.log('✅ Coincidencia encontrada en operators:', { operatorId: opDoc.id, ...opData });
 
         await setDoc(
           userRef,
@@ -133,29 +127,17 @@ export default function AuthGate({ children }) {
           { merge: true }
         );
 
-        console.log('🆕 Usuario creado en users como operator (según operators)');
+        console.log('🆕 Usuario creado/actualizado en users como operator (según operators)');
         return 'operator';
       }
 
-      // 4️⃣ 🔧 MODO PRUEBAS: si no está en ningún lado, lo registramos como operador
-      console.log(
-        '⚠️ Usuario no encontrado en admins/users/operators. Registrando como operator (modo pruebas).'
-      );
+      
+    
+// 4️⃣ Si no está en admins/users/operators → NO autorizado
+console.log('🚫 Usuario no encontrado en admins/users/operators. Acceso denegado.');
+return false;
 
-      await setDoc(
-        userRef,
-        {
-          email,
-          role: 'operator',
-          isActive: true,
-          name: user.displayName || email,
-          createdAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
 
-      console.log('🆕 Usuario creado en users como operator (fallback pruebas)');
-      return 'operator';
     } catch (error) {
       console.error('💥 Error verificando autorización:', error);
       return false;
@@ -232,7 +214,18 @@ export default function AuthGate({ children }) {
         return;
       }
 
-      // 👉 Sí hay usuario
+      // ✅ PORTAL PÚBLICO:
+      // Si estamos en /solicitudes, /solicitud-asignacion o /prestamo-equipo
+      // NO validamos roles internos (admins/users/operators) para evitar:
+      // - crear usuarios en 'users' por accidente
+      // - redirecciones a /admin o /operador
+      if (isPublicRoute && !isProtectedRoute && !isLoginPage) {
+        console.log('🌐 Ruta pública: se omite checkUserAuthorization()');
+        setLoading(false);
+        return;
+      }
+
+      // 👉 Sí hay usuario (zona interna)
       const role = await checkUserAuthorization(user);
 
       if (role) {
@@ -259,7 +252,7 @@ export default function AuthGate({ children }) {
       console.log('🧹 Limpiando AuthGate');
       unsubscribe();
     };
-  }, [router, pathname, isProtectedRoute, isLoginPage]);
+  }, [router, pathname, isProtectedRoute, isPublicRoute, isLoginPage]);
 
   // Loading
   if (loading) {

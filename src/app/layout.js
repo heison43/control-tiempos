@@ -3,7 +3,7 @@ import "./globals.css";
 import PwaInstallPrompt from "../components/PwaInstallPrompt";
 
 export const metadata = {
-  title: "Control Tiempos",
+  title: "Gestión de Equipos",
   description: "Sistema de control de tiempos",
   manifest: "/manifest.webmanifest",
   icons: {

@@ -22,10 +22,15 @@ import ManageEquipmentLoans from '../admin/ManageEquipmentLoans';
 
 export default function AdminPanel() {
   const [operators, setOperators] = useState([]);
-  const [equipment, setEquipment] = useState([]);
-  const [weeklyAssignments, setWeeklyAssignments] = useState([]);
-  const [selectedOperator, setSelectedOperator] = useState('');
-  const [selectedEquipment, setSelectedEquipment] = useState('');
+const [equipment, setEquipment] = useState([]);
+const [weeklyAssignments, setWeeklyAssignments] = useState([]);
+
+// 🔹 Ahora soportamos selección múltiple de operadores
+const [selectedOperators, setSelectedOperators] = useState([]);
+
+// Equipo manual (solo se usa cuando hay 1 operador seleccionado)
+const [selectedEquipment, setSelectedEquipment] = useState('');
+
   const [activity, setActivity] = useState('');
   const [location, setLocation] = useState('');
   const [solicitadoPor, setSolicitadoPor] = useState('');
@@ -218,6 +223,19 @@ export default function AdminPanel() {
     [filteredRequests, selectedRequestId]
   );
 
+    // ---------- Mapa: cuántas asignaciones tiene cada solicitud ----------
+  const requestAssignmentInfo = useMemo(() => {
+    const map = {};
+
+    assignments.forEach((a) => {
+      if (a.linkedRequestId) {
+        map[a.linkedRequestId] = (map[a.linkedRequestId] || 0) + 1;
+      }
+    });
+
+    return map;
+  }, [assignments]);
+
 
     // ---------- Estadísticas de solicitudes ----------
   const requestStats = useMemo(
@@ -366,34 +384,41 @@ export default function AdminPanel() {
 
 
   // ---------- Lógica Operador → Equipo ----------
-  useEffect(() => {
-    if (!selectedOperator) {
-      setSelectedEquipment('');
-      return;
-    }
+// Si hay SOLO 1 operador seleccionado, autollenamos su equipo.
+// Con 0 o más de 1 operadores, limpiamos el equipo manual
+// (en ese caso se usará el equipo asignado a cada operador al crear las asignaciones).
+useEffect(() => {
+  if (selectedOperators.length !== 1) {
+    setSelectedEquipment('');
+    return;
+  }
 
-    const hoy = new Date();
-    const asignacionActiva = weeklyAssignments.find((a) => {
-      const desde = a.fechaInicio?.toDate
-        ? a.fechaInicio.toDate()
-        : new Date(a.fechaInicio);
-      const hasta = a.fechaFin?.toDate
-        ? a.fechaFin.toDate()
-        : new Date(a.fechaFin);
-      return (
-        a.operadorId === selectedOperator &&
-        hoy >= desde &&
-        hoy <= hasta &&
-        a.estado === 'activo'
-      );
-    });
+  const operadorId = selectedOperators[0];
+  const hoy = new Date();
 
-    if (asignacionActiva) {
-      setSelectedEquipment(asignacionActiva.equipoId);
-    } else {
-      setSelectedEquipment('');
-    }
-  }, [selectedOperator, weeklyAssignments]);
+  const asignacionActiva = weeklyAssignments.find((a) => {
+    const desde = a.fechaInicio?.toDate
+      ? a.fechaInicio.toDate()
+      : new Date(a.fechaInicio);
+    const hasta = a.fechaFin?.toDate
+      ? a.fechaFin.toDate()
+      : new Date(a.fechaFin);
+
+    return (
+      a.operadorId === operadorId &&
+      hoy >= desde &&
+      hoy <= hasta &&
+      a.estado === 'activo'
+    );
+  });
+
+  if (asignacionActiva) {
+    setSelectedEquipment(asignacionActiva.equipoId);
+  } else {
+    setSelectedEquipment('');
+  }
+}, [selectedOperators, weeklyAssignments]);
+
 
   // ---------- Equipos disponibles ----------
   const equiposDisponibles = equipment.filter((eq) => {
@@ -412,72 +437,124 @@ export default function AdminPanel() {
     return !ocupado;
   });
 
-  // ---------- Crear asignación ----------
-      const handleCreateAssignment = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (
-      !selectedOperator ||
-      !activity.trim() ||
-      !location.trim() ||
-      !solicitadoPor.trim()
-    ) {
-      setError('Completa operador, actividad, lugar y solicitado por.');
-      return;
-    }
-
-    // Usaremos el mismo serverTimestamp para createdAt y, si aplica,
-    // como fecha de solicitud cuando no viene de solicitud externa.
-    const nowTs = serverTimestamp();
-
-    const data = {
-  operatorId: selectedOperator,
-  equipmentId: selectedEquipment || null,
-  activity: activity.trim(),
-  location: location.trim(),
-  solicitadoPor: solicitadoPor.trim(),
-  cedulaSolicitante: cedulaSolicitante.trim() || null,
-  centroCosto: centroCosto.trim() || null,
-  telefonoSolicitante: telefonoSolicitante.trim() || null,   //  NUEVO
-  areaSolicitante: areaSolicitante.trim() || null,           //  NUEVO
-  status: 'pendiente',
-  createdAt: nowTs,
-  startTime: null,
-  endTime: null,
-  durationMinutes: null,
-  evidences: [],
+  // ---------- Cambio de operadores seleccionados (select múltiple) ----------
+const handleOperatorSelectChange = (e) => {
+  const selected = Array.from(e.target.selectedOptions).map((opt) => opt.value);
+  setSelectedOperators(selected);
 };
 
 
-    // 👉 Si viene de una solicitud externa, usamos la fecha/código de esa solicitud
-    if (linkedRequest) {
-      data.linkedRequestId = linkedRequest.id;
-      data.requestCode = linkedRequest.code || null;
-      data.requestCreatedAt = linkedRequest.createdAt || null; // fecha real de solicitud
-    } else {
-      // 👉 Asignaciones creadas directamente por el operador:
-      // la fecha/hora de solicitud será igual a la de creación
-      data.linkedRequestId = null;
-      data.requestCode = null;
-      data.requestCreatedAt = nowTs;
+  // ---------- Crear asignación (multi-operador) ----------
+const handleCreateAssignment = async (e) => {
+  e.preventDefault();
+  setError('');
+
+  if (
+    selectedOperators.length === 0 ||
+    !activity.trim() ||
+    !location.trim() ||
+    !solicitadoPor.trim()
+  ) {
+    setError(
+      'Selecciona al menos un operador y completa actividad, lugar y solicitado por.'
+    );
+    return;
+  }
+
+  if (selectedOperators.length > 3) {
+    setError('Máximo 3 operadores por asignación rápida.');
+    return;
+  }
+
+  try {
+    const createdIds = [];
+
+    for (const operadorId of selectedOperators) {
+      // Para cada operador determinamos el equipo que le corresponde:
+
+      let finalEquipmentId = null;
+
+      // Caso 1: solo hay un operador y el admin eligió equipo manual
+      if (selectedOperators.length === 1 && selectedEquipment) {
+        finalEquipmentId = selectedEquipment;
+      } else {
+        // Caso 2: varios operadores (o uno sin equipo manual) →
+        // buscamos su equipo según la programación semanal
+        const hoy = new Date();
+        const asignacionActiva = weeklyAssignments.find((a) => {
+          const desde = a.fechaInicio?.toDate
+            ? a.fechaInicio.toDate()
+            : new Date(a.fechaInicio);
+          const hasta = a.fechaFin?.toDate
+            ? a.fechaFin.toDate()
+            : new Date(a.fechaFin);
+
+          return (
+            a.operadorId === operadorId &&
+            hoy >= desde &&
+            hoy <= hasta &&
+            a.estado === 'activo'
+          );
+        });
+
+        finalEquipmentId = asignacionActiva ? asignacionActiva.equipoId : null;
+      }
+
+      // Timestamp de creación (cada asignación tendrá su propio serverTimestamp)
+      const nowTs = serverTimestamp();
+
+      const data = {
+        operatorId: operadorId,
+        equipmentId: finalEquipmentId,
+        activity: activity.trim(),
+        location: location.trim(),
+        solicitadoPor: solicitadoPor.trim(),
+        cedulaSolicitante: cedulaSolicitante.trim() || null,
+        centroCosto: centroCosto.trim() || null,
+        telefonoSolicitante: telefonoSolicitante.trim() || null,
+        areaSolicitante: areaSolicitante.trim() || null,
+        status: 'pendiente',
+        createdAt: nowTs,
+        startTime: null,
+        endTime: null,
+        durationMinutes: null,
+        evidences: [],
+      };
+
+      // Enlace con la solicitud pública (si viene desde "Usar para crear asignación")
+      if (linkedRequest) {
+        data.linkedRequestId = linkedRequest.id;
+        data.requestCode = linkedRequest.code || null;
+        data.requestCreatedAt = linkedRequest.createdAt || null;
+      } else {
+        data.linkedRequestId = null;
+        data.requestCode = null;
+        data.requestCreatedAt = nowTs;
+      }
+
+      const created = await addDoc(collection(db, 'assignments'), data);
+      createdIds.push(created.id);
     }
 
-    await addDoc(collection(db, 'assignments'), data);
+    console.log('✅ Asignaciones creadas:', createdIds);
 
-    // Limpiar formulario
-     setActivity('');
-     setLocation('');
-     setSolicitadoPor('');
-     setCedulaSolicitante('');
-     setCentroCosto('');
-     setTelefonoSolicitante('');    // NUEVO
-     setAreaSolicitante('');        // NUEVO
-     setSelectedOperator('');
-     setSelectedEquipment('');
-     setLinkedRequest(null);
+    // Limpiar formulario después de crear todas
+    setActivity('');
+    setLocation('');
+    setSolicitadoPor('');
+    setCedulaSolicitante('');
+    setCentroCosto('');
+    setTelefonoSolicitante('');
+    setAreaSolicitante('');
+    setSelectedOperators([]);   // 👈 limpio array
+    setSelectedEquipment('');
+    setLinkedRequest(null);
+  } catch (err) {
+    console.error('Error creando asignaciones:', err);
+    setError('No se pudo crear la asignación. Intenta de nuevo.');
+  }
+};
 
-  };
 
 
 
@@ -852,21 +929,31 @@ export default function AdminPanel() {
                 }}
               >
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>👤 Operador *</label>
-                  <select
-                    value={selectedOperator}
-                    onChange={(e) => setSelectedOperator(e.target.value)}
-                    style={styles.select}
-                    required
-                  >
-                    <option value="">Selecciona un operador</option>
-                    {operators.map((op) => (
-                      <option key={op.id} value={op.id}>
-                        {op.name} {op.codigo ? `(${op.codigo})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+  <label style={styles.label}>👤 Operador(es) *</label>
+  <select
+    multiple
+    value={selectedOperators}
+    onChange={handleOperatorSelectChange}
+    style={{ ...styles.select, height: '110px' }}
+    required
+  >
+    {operators.map((op) => (
+      <option key={op.id} value={op.id}>
+        {op.name} {op.codigo ? `(${op.codigo})` : ''}
+      </option>
+    ))}
+  </select>
+  <p
+    style={{
+      fontSize: '0.75rem',
+      color: '#6b7280',
+      marginTop: '4px',
+    }}
+  >
+    Puedes seleccionar 1, 2 o hasta 3 operadores (Ctrl + clic / Shift + clic).
+  </p>
+</div>
+
 
                 <div style={styles.formGroup}>
                   <label style={styles.label}>👥 Solicitado por *</label>
@@ -939,30 +1026,42 @@ export default function AdminPanel() {
                 </div>
 
                 <div style={styles.formGroup}>
-                  <label style={styles.label}>🚜 Equipo</label>
-                  <select
-                    value={selectedEquipment}
-                    onChange={(e) => setSelectedEquipment(e.target.value)}
-                    style={styles.select}
-                    disabled={!!selectedEquipment}
-                  >
-                    <option value="">
-                      {selectedEquipment
-                        ? 'Asignado automáticamente'
-                        : 'Selecciona un equipo (opcional)'}
-                    </option>
-                    {equiposDisponibles.map((eq) => (
-                      <option key={eq.id} value={eq.id}>
-                        {eq.name} {eq.codigo ? `(${eq.codigo})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedEquipment && (
-                    <div style={styles.autoAssigned}>
-                      ✅ Equipo asignado automáticamente
-                    </div>
-                  )}
-                </div>
+  <label style={styles.label}>🚜 Equipo</label>
+  <select
+    value={selectedEquipment}
+    onChange={(e) => setSelectedEquipment(e.target.value)}
+    style={styles.select}
+    // Con más de 1 operador NO se puede elegir equipo manual.
+    disabled={selectedOperators.length !== 1 || !!selectedEquipment}
+  >
+    <option value="">
+      {selectedOperators.length > 1
+        ? 'Se usará el equipo asignado a cada operador'
+        : selectedEquipment
+        ? 'Asignado automáticamente'
+        : 'Selecciona un equipo (opcional)'}
+    </option>
+    {equiposDisponibles.map((eq) => (
+      <option key={eq.id} value={eq.id}>
+        {eq.name} {eq.codigo ? `(${eq.codigo})` : ''}
+      </option>
+    ))}
+  </select>
+
+  {selectedOperators.length > 1 && (
+    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '4px' }}>
+      Con varios operadores se usará automáticamente el equipo asignado
+      a cada uno en la programación semanal.
+    </p>
+  )}
+
+  {selectedOperators.length === 1 && selectedEquipment && (
+    <div style={styles.autoAssigned}>
+      ✅ Equipo asignado automáticamente desde la programación semanal
+    </div>
+  )}
+</div>
+
 
                 <div style={styles.formGroup}>
                   <label style={styles.label}>📍 Lugar *</label>
@@ -1419,145 +1518,206 @@ export default function AdminPanel() {
           </>
         );
 
-            case 'solicitudes':
-        return (
-          <section
-            style={{ ...styles.card, ...(isMobile ? styles.cardMobile : {}) }}
+                case 'solicitudes': {
+      // cuántas asignaciones tiene la solicitud seleccionada
+      const assignedCountForSelected =
+        selectedRequest && requestAssignmentInfo[selectedRequest.id]
+          ? requestAssignmentInfo[selectedRequest.id]
+          : 0;
+
+      return (
+        <section
+          style={{ ...styles.card, ...(isMobile ? styles.cardMobile : {}) }}
+        >
+          <div
+            style={{
+              ...styles.cardHeader,
+              ...(isMobile ? styles.cardHeaderMobile : {}),
+            }}
           >
-            <div
-              style={{
-                ...styles.cardHeader,
-                ...(isMobile ? styles.cardHeaderMobile : {}),
-              }}
-            >
-              <div style={styles.requestHeaderLeft}>
-                <h2 style={styles.cardTitle}>📨 Solicitudes de Asignación</h2>
-                <p style={styles.cardSubtitle}>
-                  Revisa y aprueba las solicitudes enviadas desde el formulario
-                  público. Usa los datos para crear una nueva asignación y mantén
-                  trazabilidad de cada caso.
-                </p>
+            <div style={styles.requestHeaderLeft}>
+              <h2 style={styles.cardTitle}>📨 Solicitudes de Asignación</h2>
+              <p style={styles.cardSubtitle}>
+                Revisa y aprueba las solicitudes enviadas desde el formulario
+                público. Usa los datos para crear una nueva asignación y mantén
+                trazabilidad de cada caso.
+              </p>
 
-                {/* chips de resumen */}
-                <div style={styles.requestSummaryChips}>
-                  <div style={{ ...styles.requestSummaryChip, background: 'rgba(148,163,184,0.15)', color: '#0f172a' }}>
-                    📌 Total: <strong>{requestStats.total}</strong>
-                  </div>
-                  <div style={{ ...styles.requestSummaryChip, background: 'rgba(245,158,11,0.16)', color: '#b45309' }}>
-                    ⏳ Pendientes: <strong>{requestStats.pending}</strong>
-                  </div>
-                  <div style={{ ...styles.requestSummaryChip, background: 'rgba(16,185,129,0.18)', color: '#047857' }}>
-                    ✅ Aprobadas: <strong>{requestStats.approved}</strong>
-                  </div>
-                  <div style={{ ...styles.requestSummaryChip, background: 'rgba(248,113,113,0.16)', color: '#b91c1c' }}>
-                    ❌ Rechazadas: <strong>{requestStats.rejected}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div style={styles.requestHeaderRight}>
-                <button
-                  type="button"
-                  onClick={handleExportRequestsCSV}
-                  style={styles.btnExportRequests}
+              {/* chips de resumen */}
+              <div style={styles.requestSummaryChips}>
+                <div
+                  style={{
+                    ...styles.requestSummaryChip,
+                    background: 'rgba(148,163,184,0.15)',
+                    color: '#0f172a',
+                  }}
                 >
-                  📥 Exportar CSV
-                </button>
+                  📌 Total: <strong>{requestStats.total}</strong>
+                </div>
+                <div
+                  style={{
+                    ...styles.requestSummaryChip,
+                    background: 'rgba(245,158,11,0.16)',
+                    color: '#b45309',
+                  }}
+                >
+                  ⏳ Pendientes: <strong>{requestStats.pending}</strong>
+                </div>
+                <div
+                  style={{
+                    ...styles.requestSummaryChip,
+                    background: 'rgba(16,185,129,0.18)',
+                    color: '#047857',
+                  }}
+                >
+                  ✅ Aprobadas: <strong>{requestStats.approved}</strong>
+                </div>
+                <div
+                  style={{
+                    ...styles.requestSummaryChip,
+                    background: 'rgba(248,113,113,0.16)',
+                    color: '#b91c1c',
+                  }}
+                >
+                  ❌ Rechazadas: <strong>{requestStats.rejected}</strong>
+                </div>
               </div>
             </div>
 
-            <div
-  style={{
-    ...styles.requestFiltersBar,
-    ...(isMobile ? styles.requestFiltersBarMobile : {}),
-  }}
->
-  {[
-    { id: 'pending', label: 'Pendientes' },
-    { id: 'approved', label: 'Aprobadas' },
-    { id: 'rejected', label: 'Rechazadas' },
-    { id: 'all',      label: 'Todas' },
-  ].map((f) => (
-    <button
-      key={f.id}
-      onClick={() => setRequestFilter(f.id)}
-      style={{
-        ...styles.requestFilterButton,
-        ...(requestFilter === f.id
-          ? styles.requestFilterButtonActive
-          : {}),
-      }}
-    >
-      {f.label}
-    </button>
-  ))}
-</div>
+            <div style={styles.requestHeaderRight}>
+              <button
+                type="button"
+                onClick={handleExportRequestsCSV}
+                style={styles.btnExportRequests}
+              >
+                📥 Exportar CSV
+              </button>
+            </div>
+          </div>
 
-
-
-                        <div
-              style={{
-                ...styles.requestGrid,
-                ...(isMobile ? styles.requestGridMobile : {}),
-              }}
-            >
-              <div
+          {/* Filtros de estado */}
+          <div
+            style={{
+              ...styles.requestFiltersBar,
+              ...(isMobile ? styles.requestFiltersBarMobile : {}),
+            }}
+          >
+            {[
+              { id: 'pending', label: 'Pendientes' },
+              { id: 'approved', label: 'Aprobadas' },
+              { id: 'rejected', label: 'Rechazadas' },
+              { id: 'all', label: 'Todas' },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setRequestFilter(f.id)}
                 style={{
-                  ...styles.requestList,
-                  ...(isMobile ? styles.requestListMobile : {}),
+                  ...styles.requestFilterButton,
+                  ...(requestFilter === f.id
+                    ? styles.requestFilterButtonActive
+                    : {}),
                 }}
               >
-                {filteredRequests.length === 0 ? (
-                  <p style={styles.requestEmpty}>
-                    No hay solicitudes para este filtro.
-                  </p>
-                ) : (
-                  filteredRequests.map((r) => (
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          <div
+            style={{
+              ...styles.requestGrid,
+              ...(isMobile ? styles.requestGridMobile : {}),
+            }}
+          >
+            {/* LISTA IZQUIERDA */}
+            <div
+              style={{
+                ...styles.requestList,
+                ...(isMobile ? styles.requestListMobile : {}),
+              }}
+            >
+              {filteredRequests.length === 0 ? (
+                <p style={styles.requestEmpty}>
+                  No hay solicitudes para este filtro.
+                </p>
+              ) : (
+                filteredRequests.map((r) => {
+                  const assignedCount =
+                    requestAssignmentInfo[r.id] || 0;
+                  const hasAssignments = assignedCount > 0;
+
+                  return (
                     <button
                       key={r.id}
                       onClick={() => setSelectedRequestId(r.id)}
                       style={{
                         ...styles.requestItem,
-                        ...(selectedRequest && selectedRequest.id === r.id
+                        ...(selectedRequest &&
+                        selectedRequest.id === r.id
                           ? styles.requestItemActive
                           : {}),
                       }}
                     >
                       <div style={styles.requestCode}>
                         {r.trackingCode || r.code || 'SIN-CÓDIGO'}
-                          </div>
+                      </div>
 
                       <div style={styles.requestName}>
                         {r.requesterName || 'Sin nombre'}
                       </div>
+
                       <div style={styles.requestActivity}>
                         {r.activity && r.activity.length > 60
                           ? r.activity.slice(0, 60) + '...'
                           : r.activity || 'Sin actividad'}
                       </div>
-                    </button>
-                  ))
-                )}
-              </div>
 
-              <div
-                style={{
-                  ...styles.requestDetail,
-                  ...(isMobile ? styles.requestDetailMobile : {}),
-                }}
-              >
-                {selectedRequest ? (
-                  <>
-                    <div style={styles.requestDetailHeader}>
-                      <div>
-                        <div style={styles.requestDetailLabel}>
-                          Código de seguimiento
-                        </div>
-                        <div style={styles.requestDetailCode}>
-                        {selectedRequest.trackingCode || selectedRequest.code || 'SIN-CÓDIGO'}
-                          </div>
-
+                      {/* estado de asignación */}
+                      <div style={styles.requestAssignStatusRow}>
+                        <span
+                          style={{
+                            ...styles.requestAssignStatus,
+                            ...(hasAssignments
+                              ? styles.requestAssignStatusAssigned
+                              : styles.requestAssignStatusPending),
+                          }}
+                        >
+                          {hasAssignments
+                            ? assignedCount === 1
+                              ? '1 asignación creada'
+                              : `${assignedCount} asignaciones`
+                            : 'Sin asignación'}
+                        </span>
                       </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            {/* DETALLE DERECHA */}
+            <div
+              style={{
+                ...styles.requestDetail,
+                ...(isMobile ? styles.requestDetailMobile : {}),
+              }}
+            >
+              {selectedRequest ? (
+                <>
+                  <div style={styles.requestDetailHeader}>
+                    <div>
+                      <div style={styles.requestDetailLabel}>
+                        Código de seguimiento
+                      </div>
+                      <div style={styles.requestDetailCode}>
+                        {selectedRequest.trackingCode ||
+                          selectedRequest.code ||
+                          'SIN-CÓDIGO'}
+                      </div>
+                    </div>
+
+                    {/* estado de la solicitud + estado de asignación */}
+                    <div style={styles.requestHeaderStatusGroup}>
                       <div
                         style={styles.requestStatusPill(
                           selectedRequest.status || 'pending'
@@ -1569,131 +1729,149 @@ export default function AdminPanel() {
                           ? 'Rechazada'
                           : 'Pendiente'}
                       </div>
-                    </div>
 
-                    <div style={styles.requestDetailBody}>
-  <div>
-    <div style={styles.requestDetailItemLabel}>
-      Solicitante
-    </div>
-    <div style={styles.requestDetailItemValue}>
-      {selectedRequest.requesterName || '—'}
-      {selectedRequest.requesterId
-        ? ` • C.C. ${selectedRequest.requesterId}`
-        : ''}
-    </div>
-  </div>
-
-  <div>
-  <div style={styles.requestDetailItemLabel}>Teléfono</div>
-  <div style={styles.requestDetailItemValue}>
-    {selectedRequest.contactPhone || '—'}
-  </div>
-</div>
-
-
-  <div>
-    <div style={styles.requestDetailItemLabel}>Área</div>
-    <div style={styles.requestDetailItemValue}>
-      {selectedRequest.requesterArea ||
-        selectedRequest.area ||
-        '—'}
-    </div>
-  </div>
-
-  <div>
-    <div style={styles.requestDetailItemLabel}>
-      Centro de costos
-    </div>
-    <div style={styles.requestDetailItemValue}>
-      {selectedRequest.costCenter || '—'}
-    </div>
-  </div>
-
-  <div>
-    <div style={styles.requestDetailItemLabel}>Lugar</div>
-    <div style={styles.requestDetailItemValue}>
-      {selectedRequest.location || '—'}
-    </div>
-  </div>
-
-  <div style={{ gridColumn: '1 / -1' }}>
-    <div style={styles.requestDetailItemLabel}>
-      Actividad solicitada
-    </div>
-    <div style={styles.requestDetailItemValue}>
-      {selectedRequest.activity || '—'}
-    </div>
-  </div>
-</div>
-
-
-                    {selectedRequest.responseMessage && (
-                      <div style={styles.requestDetailMessageBox}>
-                        <div style={styles.requestDetailItemLabel}>
-                          Mensaje enviado al solicitante
-                        </div>
-                        <div style={styles.requestDetailItemValue}>
-                          {selectedRequest.responseMessage}
-                        </div>
-                      </div>
-                    )}
-
-                    <div style={styles.requestDetailActions}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleUseRequestToCreateAssignment(selectedRequest)
-                        }
-                        style={styles.requestUseBtn}
+                      <div
+                        style={styles.requestAssignStatusPill(
+                          assignedCountForSelected > 0
+                        )}
                       >
-                        ➕ Usar para crear asignación
-                      </button>
-
-                      {selectedRequest.status === 'pending' && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleChangeRequestStatus(
-                                selectedRequest,
-                                'approved'
-                              )
-                            }
-                            disabled={updatingRequestId === selectedRequest.id}
-                            style={styles.requestApproveBtn}
-                          >
-                            {updatingRequestId === selectedRequest.id
-                              ? 'Actualizando...'
-                              : '✅ Aprobar'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleChangeRequestStatus(
-                                selectedRequest,
-                                'rejected'
-                              )
-                            }
-                            disabled={updatingRequestId === selectedRequest.id}
-                            style={styles.requestRejectBtn}
-                          >
-                            ❌ Rechazar
-                          </button>
-                        </>
-                      )}
+                        {assignedCountForSelected > 0
+                          ? assignedCountForSelected === 1
+                            ? 'Asignación creada'
+                            : `${assignedCountForSelected} asignaciones`
+                          : 'Sin asignación'}
+                      </div>
                     </div>
-                  </>
-                ) : (
-                  <p style={styles.requestEmpty}>
-                    Selecciona una solicitud del listado para ver los detalles.
-                  </p>
-                )}
-              </div>
-            </div>
+                  </div>
 
-          </section>
-        );
+                  <div style={styles.requestDetailBody}>
+                    <div>
+                      <div style={styles.requestDetailItemLabel}>
+                        Solicitante
+                      </div>
+                      <div style={styles.requestDetailItemValue}>
+                        {selectedRequest.requesterName || '—'}
+                        {selectedRequest.requesterId
+                          ? ` • C.C. ${selectedRequest.requesterId}`
+                          : ''}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={styles.requestDetailItemLabel}>
+                        Teléfono
+                      </div>
+                      <div style={styles.requestDetailItemValue}>
+                        {selectedRequest.contactPhone || '—'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={styles.requestDetailItemLabel}>Área</div>
+                      <div style={styles.requestDetailItemValue}>
+                        {selectedRequest.requesterArea ||
+                          selectedRequest.area ||
+                          '—'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={styles.requestDetailItemLabel}>
+                        Centro de costos
+                      </div>
+                      <div style={styles.requestDetailItemValue}>
+                        {selectedRequest.costCenter || '—'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={styles.requestDetailItemLabel}>Lugar</div>
+                      <div style={styles.requestDetailItemValue}>
+                        {selectedRequest.location || '—'}
+                      </div>
+                    </div>
+
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div style={styles.requestDetailItemLabel}>
+                        Actividad solicitada
+                      </div>
+                      <div style={styles.requestDetailItemValue}>
+                        {selectedRequest.activity || '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedRequest.responseMessage && (
+                    <div style={styles.requestDetailMessageBox}>
+                      <div style={styles.requestDetailItemLabel}>
+                        Mensaje enviado al solicitante
+                      </div>
+                      <div style={styles.requestDetailItemValue}>
+                        {selectedRequest.responseMessage}
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={styles.requestDetailActions}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleUseRequestToCreateAssignment(selectedRequest)
+                      }
+                      style={styles.requestUseBtn}
+                    >
+                      ➕ Usar para crear asignación
+                    </button>
+
+                    {selectedRequest.status === 'pending' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleChangeRequestStatus(
+                              selectedRequest,
+                              'approved'
+                            )
+                          }
+                          disabled={
+                            updatingRequestId === selectedRequest.id
+                          }
+                          style={styles.requestApproveBtn}
+                        >
+                          {updatingRequestId === selectedRequest.id
+                            ? 'Actualizando...'
+                            : '✅ Aprobar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleChangeRequestStatus(
+                              selectedRequest,
+                              'rejected'
+                            )
+                          }
+                          disabled={
+                            updatingRequestId === selectedRequest.id
+                          }
+                          style={styles.requestRejectBtn}
+                        >
+                          ❌ Rechazar
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p style={styles.requestEmpty}>
+                  Selecciona una solicitud del listado para ver los detalles.
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      );
+    }
+
 
     case 'prestamos':
       return (
@@ -1780,7 +1958,7 @@ export default function AdminPanel() {
           style={{ ...styles.header, ...(isMobile ? styles.headerMobile : {}) }}
         >
           <div>
-            <h1 style={styles.title}>🚀 Panel de Control</h1>
+            <h1 style={styles.title}>🚀 Gestión de Equipos</h1>
             <p style={styles.subtitle}>
               Gestión integral de operadores, equipos y asignaciones
             </p>
@@ -2629,5 +2807,45 @@ paginationButtonActive: {
   borderColor: '#2563eb',    // ✅ solo se sobreescribe color
 },
 
+  // chip en la lista de solicitudes (izquierda)
+  requestAssignStatusRow: {
+    marginTop: 4,
+  },
+  requestAssignStatus: {
+    fontSize: '0.7rem',
+    borderRadius: '999px',
+    padding: '3px 8px',
+    fontWeight: 600,
+    display: 'inline-block',
+  },
+  requestAssignStatusAssigned: {
+    backgroundColor: 'rgba(16,185,129,0.15)',
+    color: '#047857',
+  },
+  requestAssignStatusPending: {
+    backgroundColor: 'rgba(148,163,184,0.18)',
+    color: '#4b5563',
+  },
+
+  // grupo de pills en el header del detalle
+  requestHeaderStatusGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
+
+  // pill de estado de asignación en el detalle derecho
+  requestAssignStatusPill: (hasAssignments) => ({
+    padding: '6px 12px',
+    borderRadius: '999px',
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    background: hasAssignments
+      ? 'rgba(16,185,129,0.12)'
+      : 'rgba(148,163,184,0.18)',
+    color: hasAssignments ? '#047857' : '#4b5563',
+  }),
 
 };

@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   arrayUnion,
   getDoc,
+  getDocs,          // 👈 IMPORT NUEVO
 } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 
@@ -135,12 +136,10 @@ export default function OperatorPage() {
   return <OperatorPanel operatorId={operatorId} operatorLabel={operatorLabel} />
 }
 
-/**
- * PANEL DEL OPERADOR
- * Reutilizamos toda la lógica que ya tenías, pero:
- *  - quitamos la lista desplegable de todos los operadores
- *  - usamos el operatorId que viene del usuario logueado
- */
+/* ------------------------------------------------------------------ */
+/*  PANEL DEL OPERADOR                                                */
+/* ------------------------------------------------------------------ */
+
 function OperatorPanel({ operatorId, operatorLabel }) {
   const [assignments, setAssignments] = useState([])
   const [loading, setLoading] = useState(false)
@@ -163,6 +162,64 @@ function OperatorPanel({ operatorId, operatorLabel }) {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  // -------- helper para sincronizar estado con assignmentRequests -----
+
+  async function updateRequestExecutionStatus(assignment, newExecutionStatus) {
+    try {
+      if (!assignment) {
+        console.warn('Sin assignment para actualizar executionStatus')
+        return
+      }
+
+      let reqRef = null
+
+      // 1) Si tenemos requestId, lo usamos directo
+      if (assignment.requestId) {
+        reqRef = doc(db, 'assignmentRequests', assignment.requestId)
+      } else {
+        // 2) Si no hay requestId, buscamos por código de seguimiento
+        const candidateCode =
+          assignment.requestCode ||
+          assignment.trackingCode ||
+          assignment.code ||
+          assignment.tracking_code
+
+        if (candidateCode) {
+          const q = query(
+            collection(db, 'assignmentRequests'),
+            where('trackingCode', '==', candidateCode) // 👈 en solicitudes el campo se llama trackingCode
+          )
+          const snap = await getDocs(q)
+          if (!snap.empty) {
+            reqRef = snap.docs[0].ref
+          } else {
+            console.warn(
+              'No se encontró assignmentRequest con trackingCode:',
+              candidateCode
+            )
+          }
+        }
+      }
+
+      if (!reqRef) {
+        console.warn(
+          'No se pudo determinar la solicitud asociada para sincronizar executionStatus'
+        )
+        return
+      }
+
+      await updateDoc(reqRef, {
+        executionStatus: newExecutionStatus, // 'pending' | 'in_progress' | 'paused' | 'completed'
+        updatedAt: serverTimestamp(),
+      })
+    } catch (err) {
+      console.error(
+        'Error sincronizando estado de ejecución en assignmentRequests:',
+        err
+      )
+    }
+  }
 
   // -------- Cargar asignaciones del operador logueado --------
   useEffect(() => {
@@ -221,6 +278,9 @@ function OperatorPanel({ operatorId, operatorLabel }) {
         status: 'en_progreso',
         startTime: serverTimestamp(),
       })
+
+      const assignment = assignments.find((a) => a.id === id)
+      await updateRequestExecutionStatus(assignment, 'in_progress') // 👈 sincroniza con solicitud
     } catch {
       setError('No se pudo iniciar la actividad.')
     }
@@ -233,6 +293,9 @@ function OperatorPanel({ operatorId, operatorLabel }) {
         status: 'pausado',
         pausedAt: serverTimestamp(),
       })
+
+      const assignment = assignments.find((a) => a.id === id)
+      await updateRequestExecutionStatus(assignment, 'paused') // 👈
     } catch {
       setError('No se pudo pausar la actividad.')
     }
@@ -245,6 +308,9 @@ function OperatorPanel({ operatorId, operatorLabel }) {
         status: 'en_progreso',
         resumedAt: serverTimestamp(),
       })
+
+      const assignment = assignments.find((a) => a.id === id)
+      await updateRequestExecutionStatus(assignment, 'in_progress') // 👈
     } catch {
       setError('No se pudo reanudar la actividad.')
     }
@@ -267,6 +333,8 @@ function OperatorPanel({ operatorId, operatorLabel }) {
         endTime: end,
         durationMinutes,
       })
+
+      await updateRequestExecutionStatus(assignment, 'completed') // 👈
     } catch {
       setError('No se pudo finalizar la actividad.')
     }
@@ -491,19 +559,25 @@ function OperatorPanel({ operatorId, operatorLabel }) {
                       <h3 style={styles.activityTitle}>{assignment.activity}</h3>
                       <p style={styles.location}>📍 {assignment.location}</p>
                       {assignment.solicitadoPor && (
-  <p style={styles.solicitadoPor}>
-    👥 Solicitado por:{' '}
-    <strong>{assignment.solicitadoPor}</strong>
-  </p>
-)}
+                        <p style={styles.solicitadoPor}>
+                          👥 Solicitado por:{' '}
+                          <strong>{assignment.solicitadoPor}</strong>
+                        </p>
+                      )}
 
-{assignment.areaSolicitante && (
-  <p style={styles.solicitadoPor}>
-    🏢 Área solicitante:{' '}
-    <strong>{assignment.areaSolicitante}</strong>
-  </p>
-)}
+                      {assignment.telefonoSolicitante && (
+                        <p style={styles.solicitadoPor}>
+                          📞 Teléfono:{' '}
+                          <strong>{assignment.telefonoSolicitante}</strong>
+                        </p>
+                      )}
 
+                      {assignment.areaSolicitante && (
+                        <p style={styles.solicitadoPor}>
+                          🏢 Área solicitante:{' '}
+                          <strong>{assignment.areaSolicitante}</strong>
+                        </p>
+                      )}
                     </div>
                     <div
                       style={{
@@ -657,10 +731,25 @@ function OperatorPanel({ operatorId, operatorLabel }) {
               <p style={styles.modalAssignment}>
                 Actividad: <strong>{selectedAssignment?.activity}</strong>
               </p>
+
               {selectedAssignment?.solicitadoPor && (
                 <p style={styles.modalSolicitado}>
-                  Solicitado por:{' '}
+                  👥 Solicitado por:{' '}
                   <strong>{selectedAssignment.solicitadoPor}</strong>
+                </p>
+              )}
+
+              {selectedAssignment?.telefonoSolicitante && (
+                <p style={styles.modalSolicitado}>
+                  📞 Teléfono:{' '}
+                  <strong>{selectedAssignment.telefonoSolicitante}</strong>
+                </p>
+              )}
+
+              {selectedAssignment?.areaSolicitante && (
+                <p style={styles.modalSolicitado}>
+                  🏢 Área:{' '}
+                  <strong>{selectedAssignment.areaSolicitante}</strong>
                 </p>
               )}
 
@@ -698,8 +787,7 @@ function OperatorPanel({ operatorId, operatorLabel }) {
   )
 }
 
-/* -------- Estilos Modernos (tus estilos originales) -------- */
-// (los dejo tal cual como los tenías)
+/* -------- Estilos Modernos -------- */
 const styles = {
   page: {
     minHeight: '100vh',
@@ -992,9 +1080,9 @@ const styles = {
     padding: '10px 16px',
     borderRadius: '10px',
     fontSize: '0.875rem',
-    fontWeight: '600',
     textAlign: 'center',
     flex: '1',
+    fontWeight: '600',
   },
   notesSection: {
     marginTop: '16px',
@@ -1078,18 +1166,17 @@ const styles = {
     fontSize: '0.875rem',
     fontStyle: 'italic',
   },
- textarea: {
-  width: '100%',
-  border: '2px solid #e5e7eb',
-  borderRadius: '12px',
-  padding: '16px',
-  fontSize: '0.875rem',
-  resize: 'vertical',
-  minHeight: '120px',
-  fontFamily: 'inherit',
-  transition: 'border-color 0.2s ease',
-},
-
+  textarea: {
+    width: '100%',
+    border: '2px solid #e5e7eb',
+    borderRadius: '12px',
+    padding: '16px',
+    fontSize: '0.875rem',
+    resize: 'vertical',
+    minHeight: '120px',
+    fontFamily: 'inherit',
+    transition: 'border-color 0.2s ease',
+  },
   modalActions: {
     display: 'flex',
     gap: '12px',
@@ -1124,7 +1211,6 @@ const styles = {
   },
 }
 
-// Overrides responsive (igual que antes)
 const responsiveStyles = {
   page: {
     padding: '12px',

@@ -1,7 +1,7 @@
 {
   "name": "MiningSoft - Control de Tiempos",
   "short_name": "MiningSoft",
-  "description": "Panel de control para asignaciones y tiempos de operadores.",
+  "description": "Gestion de Equipos para asignaciones y tiempos de operadores.",
   "start_url": "/admin",
   "scope": "/",
   "display": "standalone",
