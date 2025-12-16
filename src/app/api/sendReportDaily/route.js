@@ -172,7 +172,7 @@ async function sendDailyReport() {
       <p><strong>Total de asignaciones del día:</strong> ${count}</p>
       <p><strong>Tipo:</strong> Envío automático programado</p>
       <hr/>
-      <p><em>Este reporte fue generado automáticamente por el sistema de control de tiempos.</em></p>
+      <p><em>Este reporte fue generado automáticamente por el sistema de Gestión de Equipos.</em></p>
     `;
 
     const recipients = getRecipients();

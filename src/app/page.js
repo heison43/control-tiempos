@@ -136,7 +136,7 @@ export default function HomePage() {
           <div className="login-icon">
             <span>⏱️</span>
           </div>
-          <h1>Control de Tiempos</h1>
+          <h1>Gestión de Equipos</h1>
           <p>Sistema de control para equipos, operadores y solicitudes.</p>
         </div>
 
@@ -164,7 +164,7 @@ export default function HomePage() {
             El portal de solicitudes público está disponible en:{' '}
             <span className="login-link">/solicitudes</span>
           </p>
-          <p className="login-copy">© 2025 Control de Tiempos • v1.0</p>
+          <p className="login-copy">© 2025 Gestión de Equipos • v1.0</p>
         </div>
       </div>
 

@@ -4,7 +4,7 @@ import PwaInstallPrompt from "../components/PwaInstallPrompt";
 
 export const metadata = {
   title: "Gestión de Equipos",
-  description: "Sistema de control de tiempos",
+  description: "Sistema de Gestion de Equipos",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icons/icon-192x192.png",

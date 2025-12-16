@@ -24,7 +24,7 @@ export async function POST(request) {
         <p><strong>Hora de envío:</strong> ${now.toLocaleTimeString("es-CO")}</p>
         <p><strong>Tipo:</strong> Envío automático programado</p>
         <hr/>
-        <p><em>Este es un reporte automático generado por el sistema de control de tiempos.</em></p>
+        <p><em>Este es un reporte automático generado por el sistema de Gestión de Equipos.</em></p>
       `;
     } else {
       subject = `📊 Reporte de Asignaciones - ${now.toLocaleDateString("es-CO")}`;

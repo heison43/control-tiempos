@@ -295,7 +295,7 @@ return false;
                 <polyline points="12 6 12 12 16 14" />
               </svg>
             </div>
-            <h1 className="login-title">Control de Tiempos</h1>
+            <h1 className="login-title">Gestión de Equipos</h1>
             <p className="login-subtitle">
               Sistema de control para equipos, operadores y solicitudes.
             </p>
@@ -391,7 +391,7 @@ return false;
 
           {/* Footer */}
           <div className="login-footer">
-            <p className="footer-text">© 2025 Control de Tiempos • v1.0</p>
+            <p className="footer-text">© 2025 Gestión de Equipos • v1.0</p>
           </div>
         </div>
       </div>
