@@ -1,22 +1,25 @@
-"use client";
+'use client';
 
-import { useEffect } from "react";
+import { useEffect } from 'react';
 
-export function ServiceWorkerRegister() {
+export default function RegisterSW() {
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      // En localhost y en producción con HTTPS
-      window.addEventListener("load", () => {
-        navigator.serviceWorker
-          .register("/service-worker.js")
-          .then((reg) => {
-            console.log("[SW] Registrado con scope:", reg.scope);
-          })
-          .catch((err) => {
-            console.error("[SW] Error al registrar:", err);
-          });
-      });
+    if (typeof window === 'undefined') return;
+
+    if (!('serviceWorker' in navigator)) {
+      console.warn('[SW] Service workers no soportados en este navegador');
+      return;
     }
+
+    navigator.serviceWorker
+      .register('/firebase-messaging-sw.js')
+      .then((registration) => {
+        console.log('[SW] Registrado correctamente:', registration.scope);
+      })
+      .catch((err) => {
+        console.error('[SW] Error registrando service worker:', err);
+        // NO relanzar error
+      });
   }, []);
 
   return null;

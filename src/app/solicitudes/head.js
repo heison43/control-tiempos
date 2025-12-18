@@ -1,16 +1,13 @@
+// src/app/solicitudes/head.js
 export default function Head() {
   return (
     <>
-      <title>Solicitudes de Asignación • MiningSoft</title>
-
-      {/* 👇 Manifest específico para el portal de solicitudes */}
-      <link rel="manifest" href="/manifest-solicitudes.webmanifest" />
-
-      {/* Si quieres puedes añadir metas específicas */}
+      <title>Solicitudes de Asignación</title>
       <meta
         name="description"
-        content="Portal de solicitudes para asignación de equipos y operadores."
+        content="Portal para enviar y consultar solicitudes de asignación de equipos."
       />
+      <link rel="manifest" href="/manifest-solicitudes.webmanifest" />
     </>
   );
 }

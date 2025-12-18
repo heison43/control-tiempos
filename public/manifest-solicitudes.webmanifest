@@ -1,12 +1,9 @@
 {
-  "name": "MiningSoft - Portal de Solicitudes",
+  "name": "Solicitudes de Asignación",
   "short_name": "Solicitudes",
-  "description": "Portal público para crear y consultar solicitudes de asignación.",
   "start_url": "/solicitudes",
-  "scope": "/solicitudes",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#0f172a",
+  "background_color": "#020617",
   "theme_color": "#4f46e5",
   "icons": [
     {
