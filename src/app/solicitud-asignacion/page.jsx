@@ -250,108 +250,131 @@ export default function SolicitudAsignacionPage() {
   };
 
   // -------- Submit solicitud --------
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitMessage('');
-    setLastTrackingCode('');
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSubmitMessage('');
+  setLastTrackingCode('');
 
-    // ✅ Requerimos sesión para que el usuario vea “Mis solicitudes”
-    if (!portalUser?.uid) {
-      setSubmitMessage(
-        'Para enviar y visualizar tus solicitudes, primero debes iniciar sesión o crear una cuenta.'
-      );
-      openAuth('login');
-      return;
-    }
+  // ✅ Requerimos sesión para que el usuario vea “Mis solicitudes”
+  if (!portalUser?.uid) {
+    setSubmitMessage(
+      'Para enviar y visualizar tus solicitudes, primero debes iniciar sesión o crear una cuenta.'
+    );
+    openAuth('login');
+    return;
+  }
 
-    // Validación extra
-    if (
-      !form.requesterName.trim() ||
-      !form.requesterId.trim() ||
-      !form.activity.trim() ||
-      !form.location.trim() ||
-      !form.contactPhone.trim() ||
-      !form.costCenter.trim()
-    ) {
-      setSubmitMessage(
-        'Por favor completa los campos obligatorios: Nombre, Cédula, Centro de costos, Actividad, Lugar y Número de contacto del responsable.'
-      );
-      return;
-    }
+  // Validación extra
+  if (
+    !form.requesterName.trim() ||
+    !form.requesterId.trim() ||
+    !form.activity.trim() ||
+    !form.location.trim() ||
+    !form.contactPhone.trim() ||
+    !form.costCenter.trim()
+  ) {
+    setSubmitMessage(
+      'Por favor completa los campos obligatorios: Nombre, Cédula, Centro de costos, Actividad, Lugar y Número de contacto del responsable.'
+    );
+    return;
+  }
 
-    setSending(true);
+  setSending(true);
 
+  try {
+    const trackingCode = generateTrackingCode();
+    const createdByName = (portalUser.displayName || form.requesterName || '').trim();
+
+    const requesterEmailNormalized = normalizeEmail(form.requesterEmail);
+    const areaTrim = form.area.trim();
+
+    // ⬇️ ANTES:  await addDoc(...)
+    // ⬇️ AHORA: guardamos el docRef para tener el ID
+    const docRef = await addDoc(collection(db, 'assignmentRequests'), {
+      requesterName: form.requesterName.trim(),
+      requesterId: form.requesterId.trim(),
+      requesterEmail: requesterEmailNormalized, // ✅ normalizado
+      // compatibilidad (admin/operador puede leer cualquiera)
+      area: areaTrim,
+      requesterArea: areaTrim, // ✅ NUEVO
+      costCenter: form.costCenter.trim(),
+      contactPhone: form.contactPhone.trim(),
+      activity: form.activity.trim(),
+      location: form.location.trim(),
+
+      // Estado admin (no romper nada)
+      status: 'pending',
+      adminMessage: '',
+      responseMessage: '',
+      assignmentIds: [],
+      trackingCode,
+
+      // vínculo portal + estados operativos
+      createdByUid: portalUser.uid,
+      createdByEmail: normalizeEmail(portalUser.email || requesterEmailNormalized),
+      createdByName,
+      executionStatus: 'pending', // pending | in_progress | paused | completed
+
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    // ✅ NUEVO: avisar a la API para correo + push a administradores
     try {
-      const trackingCode = generateTrackingCode();
-      const createdByName = (portalUser.displayName || form.requesterName || '').trim();
-
-      const requesterEmailNormalized = normalizeEmail(form.requesterEmail);
-      const areaTrim = form.area.trim();
-
-      await addDoc(collection(db, 'assignmentRequests'), {
-        requesterName: form.requesterName.trim(),
-        requesterId: form.requesterId.trim(),
-        requesterEmail: requesterEmailNormalized, // ✅ normalizado
-        // compatibilidad (admin/operador puede leer cualquiera)
-        area: areaTrim,
-        requesterArea: areaTrim, // ✅ NUEVO
-        costCenter: form.costCenter.trim(),
-        contactPhone: form.contactPhone.trim(),
-        activity: form.activity.trim(),
-        location: form.location.trim(),
-
-        // Estado admin (no romper nada)
-        status: 'pending',
-        adminMessage: '',
-        responseMessage: '',
-        assignmentIds: [],
-        trackingCode,
-
-        // vínculo portal + estados operativos
-        createdByUid: portalUser.uid,
-        createdByEmail: normalizeEmail(portalUser.email || requesterEmailNormalized),
-        createdByName,
-        executionStatus: 'pending', // pending | in_progress | paused | completed
-
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      await fetch('/api/notify-admin-new-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requestId: docRef.id,
+          trackingCode,
+          requesterName: form.requesterName.trim(),
+          activity: form.activity.trim(),
+          location: form.location.trim(),
+          costCenter: form.costCenter.trim(),
+        }),
       });
-
-      // Guardar perfil básico en el equipo
-      if (typeof window !== 'undefined') {
-        if (rememberProfile) {
-          const profileToSave = {
-            requesterName: form.requesterName.trim(),
-            requesterEmail: requesterEmailNormalized,
-            area: areaTrim,
-            costCenter: form.costCenter.trim(),
-            contactPhone: form.contactPhone.trim(),
-          };
-          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileToSave));
-        } else {
-          localStorage.removeItem(PROFILE_STORAGE_KEY);
-        }
-      }
-
-      setLastTrackingCode(trackingCode);
-      setSubmitMessage('Solicitud enviada correctamente. También la verás en “Mis solicitudes”.');
-      setRightTab('mine');
-
-      // Limpiar campos variables
-      setForm((prev) => ({
-        ...prev,
-        requesterId: '',
-        activity: '',
-        location: '',
-        contactPhone: '',
-      }));
-    } catch (error) {
-      console.error('Error creando solicitud:', error);
-      setSubmitMessage('Ocurrió un error al enviar la solicitud. Intenta nuevamente.');
-    } finally {
-      setSending(false);
+    } catch (notifyErr) {
+      console.error('Error llamando a notify-admin-new-request:', notifyErr);
+      // No rompemos el flujo si falla la notificación
     }
-  };
+
+    // Guardar perfil básico en el equipo
+    if (typeof window !== 'undefined') {
+      if (rememberProfile) {
+        const profileToSave = {
+          requesterName: form.requesterName.trim(),
+          requesterEmail: requesterEmailNormalized,
+          area: areaTrim,
+          costCenter: form.costCenter.trim(),
+          contactPhone: form.contactPhone.trim(),
+        };
+        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileToSave));
+      } else {
+        localStorage.removeItem(PROFILE_STORAGE_KEY);
+      }
+    }
+
+    setLastTrackingCode(trackingCode);
+    setSubmitMessage('Solicitud enviada correctamente. También la verás en “Mis solicitudes”.');
+    setRightTab('mine');
+
+    // Limpiar campos variables
+    setForm((prev) => ({
+      ...prev,
+      requesterId: '',
+      activity: '',
+      location: '',
+      contactPhone: '',
+    }));
+  } catch (error) {
+    console.error('Error creando solicitud:', error);
+    setSubmitMessage('Ocurrió un error al enviar la solicitud. Intenta nuevamente.');
+  } finally {
+    setSending(false);
+  }
+};
 
   // -------- Lookup por código --------
   const handleLookup = async (e) => {

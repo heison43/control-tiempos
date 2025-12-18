@@ -1,12 +1,15 @@
 /* simple service worker para MiningSoft */
 
-const CACHE_NAME = "miningsoft-v1";
+const CACHE_NAME = "miningsoft-v2";
+
 
 // Rutas mínimas que queremos tener cacheadas
 const URLS_TO_CACHE = [
   "/",
-  "/admin"
+  "/admin",
+  "/solicitudes"
 ];
+
 
 self.addEventListener("install", (event) => {
   console.log("[SW] Install");

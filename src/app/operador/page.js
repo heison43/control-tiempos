@@ -16,6 +16,9 @@ import {
   getDocs,          // 👈 IMPORT NUEVO
 } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
+import { useIsMobile } from '../../hooks/useIsMobile'
+
+
 
 /**
  * WRAPPER: verifica que el usuario logueado tenga rol "operator"
@@ -150,18 +153,8 @@ function OperatorPanel({ operatorId, operatorLabel }) {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('activas')
 
-  // 👉 NUEVO: detectar tamaño de pantalla
-  const [isMobile, setIsMobile] = useState(false)
+  const isMobile = useIsMobile()   // 👈 AHORA VIENE DEL HOOK
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768)
-    }
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   // -------- helper para sincronizar estado con assignmentRequests -----
 

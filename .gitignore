@@ -21,3 +21,6 @@ pnpm-debug.log*
 # sistema
 .DS_Store
 Thumbs.db
+
+# Firebase admin key (NO subir nunca)
+serviceAccountKey.json

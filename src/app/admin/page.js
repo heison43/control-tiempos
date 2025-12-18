@@ -18,6 +18,13 @@ import ManageAssignments from '../admin/ManageAssignments';
 import HistorialPage from '../historial/page';
 import ManageAdmins from '../admin/ManageAdmins';
 import ManageEquipmentLoans from '../admin/ManageEquipmentLoans';
+// ✅ cambia esta línea en src/app/admin/page.js
+import { useIsMobile } from '../../hooks/useIsMobile'
+
+import NotificationsManager from '../../components/NotificationsManager'
+
+
+
 
 
 export default function AdminPanel() {
@@ -66,18 +73,8 @@ const [selectedEquipment, setSelectedEquipment] = useState('');
   const [updatingRequestId, setUpdatingRequestId] = useState(null);
 
   // detectar móvil
-  const [isMobile, setIsMobile] = useState(false);
+    const isMobile = useIsMobile(); // 👈 ahora viene del hook
 
-  useEffect(() => {
-    const checkMobile = () => {
-      if (typeof window !== 'undefined') {
-        setIsMobile(window.innerWidth <= 768);
-      }
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   // ---------- Cargar datos ----------
   useEffect(() => {
@@ -1998,6 +1995,13 @@ const handleCreateAssignment = async (e) => {
           </div>
         </header>
 
+
+{/* 🔔 BLOQUE DE NOTIFICACIONES PARA ADMIN */}
+      <section style={styles.notificationsContainer}>
+        <NotificationsManager role="admin" />
+      </section>
+
+
         <nav
           style={{ ...styles.mainNav, ...(isMobile ? styles.mainNavMobile : {}) }}
         >
@@ -2847,5 +2851,13 @@ paginationButtonActive: {
       : 'rgba(148,163,184,0.18)',
     color: hasAssignments ? '#047857' : '#4b5563',
   }),
-
+ notificationsContainer: {
+    maxWidth: '360px',
+    marginBottom: '16px',
+    padding: '10px 14px',
+    borderRadius: '12px',
+    background: 'rgba(255,255,255,0.12)',
+    border: '1px solid rgba(255,255,255,0.4)',
+    backdropFilter: 'blur(8px)',
+  },
 };
