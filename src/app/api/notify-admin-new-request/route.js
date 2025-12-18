@@ -1,6 +1,9 @@
 // src/app/api/notify-admin-new-request/route.js
 import { NextResponse } from 'next/server';
-import { adminDb, adminMessaging } from '@/lib/firebaseAdmin';
+import { adminDb, adminMessaging } from '../../../lib/firebaseAdmin';
+
+// Aseguramos que sea función Node (necesario para firebase-admin)
+export const runtime = 'nodejs';
 
 // Esta API recibe en el body:
 // {
@@ -11,6 +14,17 @@ import { adminDb, adminMessaging } from '@/lib/firebaseAdmin';
 // }
 export async function POST(request) {
   try {
+    // 🛡️ Si no hay Firebase Admin (sin credenciales), salimos sin romper nada
+    if (!adminDb || !adminMessaging) {
+      console.warn(
+        '[PUSH ADMIN] Firebase Admin no está configurado; no se enviarán notificaciones push.'
+      );
+      return NextResponse.json(
+        { ok: false, reason: 'admin-not-configured' },
+        { status: 200 } // 200 para que el frontend no lo trate como error
+      );
+    }
+
     const body = await request.json();
     const {
       requestId,
@@ -62,7 +76,6 @@ export async function POST(request) {
         activity,
         location,
       },
-      // Opcional: para webpush podemos tunear más cosas
       webpush: {
         fcmOptions: {
           link: '/admin', // al tocar la notificación abre el panel admin
