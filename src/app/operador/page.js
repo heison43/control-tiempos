@@ -393,9 +393,18 @@ function OperatorPanel({ operatorId, operatorLabel }) {
     return icons[status] || '📝'
   }
 
-  // -------- Render --------
-  return (
+ // -------- Render --------
+return (
+  <>
+    <style jsx global>{`
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+    `}</style>
+
     <main style={{ ...styles.page, ...(isMobile ? responsiveStyles.page : {}) }}>
+
       <div
         style={{ ...styles.container, ...(isMobile ? responsiveStyles.container : {}) }}
       >
@@ -409,26 +418,56 @@ function OperatorPanel({ operatorId, operatorLabel }) {
               Controla tus actividades, tiempos y registros
             </p>
           </div>
-          <div
-            style={{ ...styles.stats, ...(isMobile ? responsiveStyles.stats : {}) }}
-          >
-            <div style={{ ...styles.statCard, borderLeft: '3px solid #f59e0b' }}>
-              <span style={styles.statNumber}>{stats.pendientes}</span>
-              <span style={styles.statLabel}>Pendientes</span>
-            </div>
-            <div style={{ ...styles.statCard, borderLeft: '3px solid #10b981' }}>
-              <span style={styles.statNumber}>{stats.enProgreso}</span>
-              <span style={styles.statLabel}>En Progreso</span>
-            </div>
-            <div style={{ ...styles.statCard, borderLeft: '3px solid #ef4444' }}>
-              <span style={styles.statNumber}>{stats.pausadas}</span>
-              <span style={styles.statLabel}>Pausadas</span>
-            </div>
-            <div style={{ ...styles.statCard, borderLeft: '3px solid #6b7280' }}>
-              <span style={styles.statNumber}>{stats.finalizadas}</span>
-              <span style={styles.statLabel}>Finalizadas</span>
-            </div>
-          </div>
+          <div style={{ ...styles.stats, ...(isMobile ? responsiveStyles.stats : {}) }}>
+  <div
+    style={{
+      ...styles.statCard,
+      borderLeftWidth: 3,
+      borderLeftStyle: 'solid',
+      borderLeftColor: '#f59e0b',
+    }}
+  >
+    <span style={styles.statNumber}>{stats.pendientes}</span>
+    <span style={styles.statLabel}>Pendientes</span>
+  </div>
+
+  <div
+    style={{
+      ...styles.statCard,
+      borderLeftWidth: 3,
+      borderLeftStyle: 'solid',
+      borderLeftColor: '#10b981',
+    }}
+  >
+    <span style={styles.statNumber}>{stats.enProgreso}</span>
+    <span style={styles.statLabel}>En Progreso</span>
+  </div>
+
+  <div
+    style={{
+      ...styles.statCard,
+      borderLeftWidth: 3,
+      borderLeftStyle: 'solid',
+      borderLeftColor: '#ef4444',
+    }}
+  >
+    <span style={styles.statNumber}>{stats.pausadas}</span>
+    <span style={styles.statLabel}>Pausadas</span>
+  </div>
+
+  <div
+    style={{
+      ...styles.statCard,
+      borderLeftWidth: 3,
+      borderLeftStyle: 'solid',
+      borderLeftColor: '#6b7280',
+    }}
+  >
+    <span style={styles.statNumber}>{stats.finalizadas}</span>
+    <span style={styles.statLabel}>Finalizadas</span>
+  </div>
+</div>
+
         </header>
 
         {/* Información del operador logueado (sin desplegable) */}
@@ -560,7 +599,15 @@ function OperatorPanel({ operatorId, operatorLabel }) {
               }}
             >
               {assignments.map((assignment) => (
-                <div key={assignment.id} style={styles.assignmentCard}>
+  <div
+    key={assignment.id}
+    style={{
+      ...styles.assignmentCard,
+      borderLeftColor: getStatusColor(assignment.status),
+    }}
+  >
+
+
                   <div
                     style={{
                       ...styles.assignmentHeader,
@@ -795,428 +842,602 @@ function OperatorPanel({ operatorId, operatorLabel }) {
           </div>
         </div>
       )}
-    </main>
-  )
+        </main>
+  </>
+)
+
 }
 
-/* -------- Estilos Modernos -------- */
+/* -------- Estilos ULTRA PRO (solo UI) -------- */
 const styles = {
   page: {
     minHeight: '100vh',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background:
+      'radial-gradient(1200px circle at 10% 10%, rgba(255,255,255,0.18), transparent 40%), radial-gradient(900px circle at 90% 20%, rgba(255,255,255,0.14), transparent 35%), linear-gradient(135deg, #4f46e5 0%, #7c3aed 45%, #0ea5e9 110%)',
     padding: '20px',
     fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
   },
+
   container: {
     maxWidth: '1200px',
     margin: '0 auto',
   },
+
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '24px',
+    marginBottom: '22px',
     flexWrap: 'wrap',
-    gap: '20px',
+    gap: '16px',
   },
+
   title: {
-    fontSize: '2.5rem',
-    fontWeight: '800',
-    color: 'white',
+    fontSize: '2.35rem',
+    fontWeight: '900',
+    letterSpacing: '-0.02em',
     margin: '0',
-    background: 'linear-gradient(45deg, #fff, #f0f0f0)',
+    background: 'linear-gradient(90deg, rgba(255,255,255,1), rgba(255,255,255,0.75))',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
   },
+
   subtitle: {
-    fontSize: '1.1rem',
-    color: 'rgba(255,255,255,0.8)',
+    fontSize: '1.02rem',
+    color: 'rgba(255,255,255,0.86)',
     margin: '8px 0 0 0',
+    lineHeight: 1.35,
+    maxWidth: '520px',
   },
+
   stats: {
     display: 'flex',
-    gap: '12px',
+    gap: '10px',
     flexWrap: 'wrap',
   },
+
+  // ✅ sin shorthand border (quita warning)
   statCard: {
-    background: 'rgba(255,255,255,0.1)',
-    backdropFilter: 'blur(10px)',
-    padding: '16px 20px',
-    borderRadius: '12px',
+    background: 'rgba(255,255,255,0.14)',
+    backdropFilter: 'blur(14px)',
+    padding: '14px 16px',
+    borderRadius: '16px',
     textAlign: 'center',
-    border: '1px solid rgba(255,255,255,0.2)',
-    minWidth: '100px',
+    minWidth: '104px',
+
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(255,255,255,0.22)',
+
+    borderLeftWidth: 5,
+    borderLeftStyle: 'solid',
+    borderLeftColor: 'rgba(255,255,255,0.22)',
+
+    boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
   },
+
   statNumber: {
     display: 'block',
-    fontSize: '1.8rem',
-    fontWeight: '700',
+    fontSize: '1.75rem',
+    fontWeight: '900',
     color: 'white',
     lineHeight: '1',
   },
+
   statLabel: {
-    fontSize: '0.75rem',
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: '4px',
+    fontSize: '0.74rem',
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: '6px',
+    letterSpacing: '0.02em',
   },
+
   card: {
-    background: 'white',
-    padding: '24px',
-    borderRadius: '20px',
-    boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-    marginBottom: '20px',
-    backdropFilter: 'blur(10px)',
+    background: 'rgba(255,255,255,0.92)',
+    padding: '22px',
+    borderRadius: '22px',
+    boxShadow: '0 18px 55px rgba(0,0,0,0.14)',
+    marginBottom: '18px',
+    backdropFilter: 'blur(12px)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(255,255,255,0.55)',
   },
-  formGroup: {
-    marginBottom: '0',
-  },
+
+  formGroup: { marginBottom: '0' },
+
   label: {
     display: 'block',
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#374151',
+    fontSize: '0.9rem',
+    fontWeight: '800',
+    color: '#0f172a',
     marginBottom: '8px',
+    letterSpacing: '-0.01em',
   },
+
   select: {
     width: '100%',
-    padding: '12px 16px',
-    borderRadius: '12px',
-    border: '2px solid #e5e7eb',
-    fontSize: '1rem',
-    backgroundColor: 'white',
+    padding: '12px 14px',
+    borderRadius: '14px',
+    fontSize: '0.98rem',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     transition: 'all 0.2s ease',
+
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.12)',
+
+    boxShadow: '0 6px 20px rgba(15,23,42,0.06)',
   },
+
   tabs: {
     display: 'flex',
-    background: 'white',
+    background: 'rgba(255,255,255,0.92)',
     padding: '8px',
-    borderRadius: '16px',
-    marginBottom: '16px',
-    boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+    borderRadius: '18px',
+    marginBottom: '14px',
+    backdropFilter: 'blur(12px)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(255,255,255,0.55)',
+    boxShadow: '0 14px 40px rgba(0,0,0,0.12)',
   },
+
   tab: {
     flex: '1',
-    padding: '12px 16px',
+    padding: '12px 12px',
     border: 'none',
     background: 'transparent',
-    borderRadius: '12px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
+    borderRadius: '14px',
+    fontSize: '0.9rem',
+    fontWeight: '800',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    color: '#0f172a',
+    letterSpacing: '-0.01em',
   },
+
   tabActive: {
-    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
     color: 'white',
-    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+    boxShadow: '0 10px 24px rgba(79,70,229,0.32)',
   },
+
   counterBar: {
-    background: 'rgba(255,255,255,0.9)',
-    padding: '12px 20px',
-    borderRadius: '12px',
-    marginBottom: '16px',
-    textAlign: 'center',
-    backdropFilter: 'blur(10px)',
-    border: '1px solid rgba(255,255,255,0.3)',
-  },
-  counterText: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#374151',
-  },
-  error: {
-    background: '#fef2f2',
-    border: '1px solid #fecaca',
-    color: '#dc2626',
+    background: 'rgba(255,255,255,0.85)',
     padding: '12px 16px',
-    borderRadius: '12px',
-    marginBottom: '16px',
-    fontSize: '0.875rem',
+    borderRadius: '16px',
+    marginBottom: '14px',
+    textAlign: 'center',
+    backdropFilter: 'blur(12px)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(255,255,255,0.55)',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.10)',
   },
+
+  counterText: {
+    fontSize: '0.92rem',
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: '-0.01em',
+  },
+
+  error: {
+    background: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(239, 68, 68, 0.22)',
+    color: '#b91c1c',
+    padding: '12px 14px',
+    borderRadius: '14px',
+    marginBottom: '14px',
+    fontSize: '0.9rem',
+    fontWeight: '700',
+  },
+
   loading: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '40px 20px',
-    color: '#6b7280',
+    padding: '44px 20px',
+    color: '#334155',
   },
+
   spinner: {
-    width: '40px',
-    height: '40px',
-    border: '4px solid #e5e7eb',
-    borderLeft: '4px solid #667eea',
+    width: '44px',
+    height: '44px',
+    borderWidth: 4,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.12)',
+    borderLeftColor: '#4f46e5',
     borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    marginBottom: '16px',
+    animation: 'spin 0.9s linear infinite',
+    marginBottom: '14px',
   },
+
   emptyState: {
     textAlign: 'center',
-    padding: '60px 20px',
-    color: '#6b7280',
+    padding: '54px 16px',
+    color: '#334155',
   },
+
   emptyIcon: {
-    fontSize: '4rem',
-    marginBottom: '16px',
-    opacity: '0.5',
+    fontSize: '3.8rem',
+    marginBottom: '10px',
+    opacity: '0.55',
   },
+
   assignmentsGrid: {
     display: 'grid',
-    gap: '20px',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+    gap: '16px',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
   },
+
+  // ✅ TARJETA DE ACTIVIDAD (más pro)
+  // ✅ sin shorthand border (para que si luego pintas borde izq no moleste)
   assignmentCard: {
-    background: 'white',
-    border: '1px solid #f3f4f6',
-    borderRadius: '16px',
-    padding: '20px',
-    transition: 'all 0.3s ease',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+    position: 'relative',
+    overflow: 'hidden',
+    background:
+      'radial-gradient(600px circle at 80% 0%, rgba(79,70,229,0.10), transparent 45%), radial-gradient(550px circle at 0% 40%, rgba(14,165,233,0.10), transparent 45%), rgba(255,255,255,0.95)',
+    borderRadius: '20px',
+    padding: '18px',
+    transition: 'all 0.25s ease',
+
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.10)',
+
+    borderLeftWidth: 6,
+    borderLeftStyle: 'solid',
+    borderLeftColor: 'rgba(15,23,42,0.10)',
+
+    boxShadow: '0 14px 40px rgba(15,23,42,0.10)',
   },
+
+  // franja superior elegante
+  assignmentAccent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: '6px',
+    width: '100%',
+    opacity: 0.95,
+  },
+
   assignmentHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: '16px',
+    marginBottom: '14px',
+    gap: '12px',
   },
-  assignmentInfo: {
-    flex: '1',
-  },
+
+  assignmentInfo: { flex: '1', minWidth: 0 },
+
   activityTitle: {
-    fontSize: '1.125rem',
-    fontWeight: '700',
-    color: '#1f2937',
-    margin: '0 0 4px 0',
+    fontSize: '1.18rem',
+    fontWeight: '900',
+    color: '#0f172a',
+    margin: '0 0 6px 0',
+    letterSpacing: '-0.02em',
   },
+
   location: {
-    fontSize: '0.875rem',
-    color: '#6b7280',
-    margin: '0 0 4px 0',
+    fontSize: '0.85rem',
+    color: '#334155',
+    margin: '0 0 10px 0',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '8px 10px',
+    borderRadius: '999px',
+    background: 'rgba(15,23,42,0.04)',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.08)',
+    width: 'fit-content',
   },
+
   solicitadoPor: {
-    fontSize: '0.75rem',
-    color: '#4b5563',
-    margin: '0',
-    fontStyle: 'italic',
+    fontSize: '0.8rem',
+    color: '#334155',
+    margin: '6px 0 0 0',
+    lineHeight: 1.25,
   },
+
   statusBadge: {
-    padding: '6px 12px',
-    borderRadius: '20px',
-    fontSize: '0.75rem',
-    fontWeight: '600',
+    padding: '8px 12px',
+    borderRadius: '999px',
+    fontSize: '0.78rem',
+    fontWeight: '900',
     whiteSpace: 'nowrap',
+    letterSpacing: '0.01em',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.10)',
+    boxShadow: '0 10px 22px rgba(15,23,42,0.08)',
+    backdropFilter: 'blur(8px)',
   },
+
   timeInfo: {
     display: 'flex',
-    gap: '16px',
-    marginBottom: '16px',
+    gap: '12px',
+    marginBottom: '14px',
     padding: '12px',
-    background: '#f8fafc',
-    borderRadius: '12px',
+    background: 'rgba(15,23,42,0.03)',
+    borderRadius: '16px',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.08)',
   },
+
   timeItem: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     flex: '1',
+    gap: 4,
   },
+
   timeLabel: {
-    fontSize: '0.75rem',
-    color: '#6b7280',
-    marginBottom: '4px',
+    fontSize: '0.74rem',
+    color: '#64748b',
+    fontWeight: '800',
   },
+
   timeValue: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#1f2937',
+    fontSize: '0.92rem',
+    fontWeight: '900',
+    color: '#0f172a',
+    letterSpacing: '-0.01em',
   },
+
   actions: {
     display: 'flex',
-    gap: '8px',
+    gap: '10px',
     flexWrap: 'wrap',
   },
+
   btnPrimary: {
-    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
     color: 'white',
     border: 'none',
-    padding: '10px 16px',
-    borderRadius: '10px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
+    padding: '12px 14px',
+    borderRadius: '14px',
+    fontSize: '0.92rem',
+    fontWeight: '900',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     flex: '1',
-    minWidth: '120px',
+    minWidth: '130px',
+    boxShadow: '0 14px 28px rgba(79,70,229,0.25)',
   },
+
   btnSecondary: {
-    background: '#f59e0b',
+    background: 'linear-gradient(135deg, #f59e0b, #f97316)',
     color: 'white',
     border: 'none',
-    padding: '10px 16px',
-    borderRadius: '10px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
+    padding: '12px 14px',
+    borderRadius: '14px',
+    fontSize: '0.92rem',
+    fontWeight: '900',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     flex: '1',
-    minWidth: '120px',
+    minWidth: '130px',
+    boxShadow: '0 14px 28px rgba(249,115,22,0.22)',
   },
+
   btnSuccess: {
-    background: '#10b981',
+    background: 'linear-gradient(135deg, #10b981, #22c55e)',
     color: 'white',
     border: 'none',
-    padding: '10px 16px',
-    borderRadius: '10px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
+    padding: '12px 14px',
+    borderRadius: '14px',
+    fontSize: '0.92rem',
+    fontWeight: '900',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    flex: '1',
+    minWidth: '130px',
+    boxShadow: '0 14px 28px rgba(34,197,94,0.18)',
+  },
+
+  btnOutline: {
+    background: 'rgba(255,255,255,0.7)',
+    color: '#0f172a',
+    padding: '12px 14px',
+    borderRadius: '14px',
+    fontSize: '0.92rem',
+    fontWeight: '900',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     flex: '1',
     minWidth: '120px',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.12)',
+    boxShadow: '0 10px 22px rgba(15,23,42,0.08)',
   },
-  btnOutline: {
-    background: 'transparent',
-    color: '#374151',
-    border: '2px solid #e5e7eb',
-    padding: '10px 16px',
-    borderRadius: '10px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    flex: '1',
-    minWidth: '100px',
-  },
+
   completedBadge: {
-    background: '#f0fdf4',
+    background: 'rgba(34,197,94,0.10)',
     color: '#166534',
-    padding: '10px 16px',
-    borderRadius: '10px',
-    fontSize: '0.875rem',
+    padding: '12px 14px',
+    borderRadius: '14px',
+    fontSize: '0.92rem',
     textAlign: 'center',
     flex: '1',
-    fontWeight: '600',
+    fontWeight: '900',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(34,197,94,0.22)',
   },
+
   notesSection: {
-    marginTop: '16px',
-    paddingTop: '16px',
-    borderTop: '1px solid #f3f4f6',
+    marginTop: '14px',
+    paddingTop: '14px',
+    borderTopWidth: 1,
+    borderTopStyle: 'solid',
+    borderTopColor: 'rgba(15,23,42,0.08)',
   },
+
   notesTitle: {
-    fontSize: '0.875rem',
-    fontWeight: '600',
-    color: '#374151',
-    margin: '0 0 8px 0',
+    fontSize: '0.9rem',
+    fontWeight: '900',
+    color: '#0f172a',
+    margin: '0 0 10px 0',
   },
+
   noteItem: {
-    background: '#f8fafc',
+    background: 'rgba(15,23,42,0.03)',
     padding: '12px',
-    borderRadius: '8px',
-    marginBottom: '8px',
+    borderRadius: '14px',
+    marginBottom: '10px',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.08)',
   },
+
   noteText: {
-    margin: '0 0 4px 0',
-    fontSize: '0.875rem',
-    color: '#1f2937',
+    margin: '0 0 6px 0',
+    fontSize: '0.92rem',
+    color: '#0f172a',
+    fontWeight: '700',
+    lineHeight: 1.35,
   },
+
   noteTime: {
-    fontSize: '0.75rem',
-    color: '#6b7280',
+    fontSize: '0.78rem',
+    color: '#64748b',
+    fontWeight: '800',
   },
+
   modalBackdrop: {
     position: 'fixed',
     top: '0',
     left: '0',
     width: '100%',
     height: '100%',
-    background: 'rgba(0,0,0,0.5)',
+    background: 'rgba(2, 6, 23, 0.55)',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: '1000',
     padding: '20px',
+    backdropFilter: 'blur(10px)',
   },
+
   modal: {
-    background: 'white',
-    borderRadius: '20px',
+    background: 'rgba(255,255,255,0.95)',
+    borderRadius: '22px',
     width: '100%',
-    maxWidth: '500px',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+    maxWidth: '520px',
+    boxShadow: '0 30px 80px rgba(0,0,0,0.28)',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(255,255,255,0.55)',
   },
+
   modalHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '24px',
-    borderBottom: '1px solid #f3f4f6',
+    padding: '20px 22px',
+    borderBottomWidth: 1,
+    borderBottomStyle: 'solid',
+    borderBottomColor: 'rgba(15,23,42,0.08)',
   },
+
   closeButton: {
-    background: 'none',
+    background: 'rgba(15,23,42,0.06)',
     border: 'none',
-    fontSize: '1.5rem',
+    fontSize: '1.6rem',
     cursor: 'pointer',
-    color: '#6b7280',
+    color: '#0f172a',
     padding: '0',
-    width: '32px',
-    height: '32px',
-    borderRadius: '50%',
+    width: '38px',
+    height: '38px',
+    borderRadius: '999px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   modalBody: {
-    padding: '24px',
+    padding: '20px 22px 22px',
   },
+
   modalAssignment: {
-    margin: '0 0 8px 0',
-    color: '#6b7280',
-    fontSize: '0.875rem',
+    margin: '0 0 6px 0',
+    color: '#475569',
+    fontSize: '0.9rem',
+    fontWeight: '700',
   },
+
   modalSolicitado: {
-    margin: '0 0 16px 0',
-    color: '#4b5563',
-    fontSize: '0.875rem',
-    fontStyle: 'italic',
+    margin: '0 0 14px 0',
+    color: '#334155',
+    fontSize: '0.9rem',
+    fontWeight: '700',
   },
+
   textarea: {
     width: '100%',
-    border: '2px solid #e5e7eb',
-    borderRadius: '12px',
-    padding: '16px',
-    fontSize: '0.875rem',
+    borderRadius: '16px',
+    padding: '14px',
+    fontSize: '0.95rem',
     resize: 'vertical',
     minHeight: '120px',
     fontFamily: 'inherit',
     transition: 'border-color 0.2s ease',
+    outline: 'none',
+
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.14)',
+
+    boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
+    background: 'rgba(255,255,255,0.9)',
   },
+
   modalActions: {
     display: 'flex',
-    gap: '12px',
+    gap: '10px',
     justifyContent: 'flex-end',
-    marginTop: '20px',
+    marginTop: '16px',
   },
+
   btnCancel: {
-    background: 'transparent',
-    color: '#6b7280',
-    border: '2px solid #e5e7eb',
-    padding: '12px 20px',
-    borderRadius: '10px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
+    background: 'rgba(255,255,255,0.7)',
+    color: '#0f172a',
+    padding: '12px 16px',
+    borderRadius: '14px',
+    fontSize: '0.92rem',
+    fontWeight: '900',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'rgba(15,23,42,0.12)',
+    boxShadow: '0 10px 22px rgba(15,23,42,0.08)',
   },
+
   btnSave: {
-    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+    background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
     color: 'white',
     border: 'none',
-    padding: '12px 20px',
-    borderRadius: '10px',
-    fontSize: '0.875rem',
-    fontWeight: '600',
+    padding: '12px 16px',
+    borderRadius: '14px',
+    fontSize: '0.92rem',
+    fontWeight: '900',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
+    boxShadow: '0 14px 28px rgba(79,70,229,0.25)',
   },
+
   btnDisabled: {
     opacity: '0.6',
     cursor: 'not-allowed',
@@ -1224,40 +1445,45 @@ const styles = {
 }
 
 const responsiveStyles = {
-  page: {
-    padding: '12px',
-  },
-  container: {
-    width: '100%',
-  },
+  page: { padding: '12px' },
+  container: { width: '100%' },
+
   header: {
     flexDirection: 'column',
     alignItems: 'flex-start',
   },
+
   stats: {
     width: '100%',
   },
+
   card: {
     padding: '16px',
   },
+
   tabs: {
     flexDirection: 'column',
     gap: '8px',
   },
+
   counterBar: {
     textAlign: 'left',
   },
+
   assignmentsGrid: {
     gridTemplateColumns: '1fr',
   },
+
   assignmentHeader: {
     flexDirection: 'column',
-    gap: '8px',
+    gap: '10px',
   },
+
   timeInfo: {
     flexDirection: 'column',
     alignItems: 'stretch',
   },
+
   actions: {
     flexDirection: 'column',
     alignItems: 'stretch',
