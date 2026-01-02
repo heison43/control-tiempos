@@ -1,0 +1,168 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { db, messaging } from "../firebaseConfig";
+
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  setDoc,
+  doc,
+  serverTimestamp,
+} from 'firebase/firestore'
+import { getToken, isSupported } from 'firebase/messaging'
+
+export default function OperatorNotificationsManager({ operatorId }) {
+  const [isActivating, setIsActivating] = useState(false)
+  const [enabled, setEnabled] = useState(false)
+  const [error, setError] = useState('')
+  const [statusText, setStatusText] = useState('Pulsa para activar')
+
+  // 🔍 Al cargar, ver si ya hay token para este operador
+  useEffect(() => {
+    if (!operatorId) return
+
+    const checkExistingToken = async () => {
+      try {
+        const supported = await isSupported()
+        if (!supported) {
+          setStatusText('Notificaciones no soportadas en este navegador')
+          return
+        }
+
+        const q = query(
+          collection(db, 'operatorPushTokens'),
+          where('operatorId', '==', operatorId)
+        )
+        const snap = await getDocs(q)
+        if (!snap.empty) {
+          setEnabled(true)
+          setStatusText('Notificaciones activadas en este dispositivo')
+        } else {
+          setEnabled(false)
+          setStatusText('Pulsa para activar')
+        }
+      } catch (err) {
+        console.error('Error comprobando tokens existentes:', err)
+        setStatusText('No se pudo comprobar el estado de notificaciones')
+      }
+    }
+
+    checkExistingToken()
+  }, [operatorId])
+
+  const handleActivate = async () => {
+    setError('')
+    setIsActivating(true)
+    setStatusText('Activando…')
+
+    try {
+      if (!operatorId) {
+        throw new Error('No hay operatorId disponible')
+      }
+
+      const supported = await isSupported()
+      if (!supported) {
+        throw new Error('Este navegador no soporta notificaciones push')
+      }
+
+      if (!('Notification' in window)) {
+        throw new Error('Notificaciones no disponibles en este navegador')
+      }
+
+      // 1️⃣ Pedir permiso al navegador
+      const permission = await Notification.requestPermission()
+      if (permission !== 'granted') {
+        throw new Error('Permiso de notificaciones no concedido')
+      }
+
+      if (!messaging) {
+        throw new Error('Firebase Messaging no está inicializado')
+      }
+
+      // 2️⃣ Obtener token FCM
+      const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+      if (!vapidKey) {
+        console.warn('Falta NEXT_PUBLIC_FIREBASE_VAPID_KEY')
+      }
+
+      const token = await getToken(messaging, {
+        vapidKey,
+      })
+
+      if (!token) {
+        throw new Error('No se pudo obtener un token de notificación')
+      }
+
+      // 3️⃣ Guardar/actualizar el token en Firestore
+      // Usamos el token como ID de documento para evitar duplicados
+      const ref = doc(db, 'operatorPushTokens', token)
+
+      await setDoc(
+        ref,
+        {
+          operatorId,
+          token,
+          updatedAt: serverTimestamp(),
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        },
+        { merge: true }
+      )
+
+      setEnabled(true)
+      setStatusText('Notificaciones activadas en este dispositivo ✅')
+    } catch (err) {
+      console.error('Error activando notificaciones de operador:', err)
+      setError(err.message || 'No se pudo activar las notificaciones.')
+      setEnabled(false)
+      setStatusText('No se pudieron activar las notificaciones')
+    } finally {
+      // ⚠️ Pase lo que pase, que el botón salga del estado “Activando…”
+      setIsActivating(false)
+    }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <button
+        onClick={handleActivate}
+        disabled={isActivating}
+        style={{
+          width: '100%',
+          padding: '12px 16px',
+          borderRadius: '999px',
+          border: 'none',
+          background: enabled
+            ? 'linear-gradient(90deg, #22c55e, #16a34a)'
+            : 'linear-gradient(90deg, #3b82f6, #06b6d4)',
+          color: 'white',
+          fontWeight: 600,
+          fontSize: '0.9rem',
+          cursor: isActivating ? 'wait' : 'pointer',
+          boxShadow: '0 6px 20px rgba(37,99,235,0.35)',
+        }}
+      >
+        {isActivating ? 'Activando…' : enabled ? 'Notificaciones activadas' : 'Activar notificaciones'}
+      </button>
+
+      <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>{statusText}</span>
+
+      {error && (
+        <div
+          style={{
+            marginTop: 4,
+            padding: '8px 10px',
+            borderRadius: 8,
+            background: '#fef2f2',
+            color: '#b91c1c',
+            fontSize: '0.8rem',
+          }}
+        >
+          ⚠️ {error}
+        </div>
+      )}
+    </div>
+  )
+}

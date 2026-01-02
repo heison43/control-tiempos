@@ -17,6 +17,8 @@ import {
 } from 'firebase/firestore'
 import { onAuthStateChanged } from 'firebase/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import OperatorNotificationsManager from '../../components/OperatorNotificationsManager'
+
 
 
 
@@ -457,6 +459,23 @@ function OperatorPanel({ operatorId, operatorLabel }) {
             </div>
           </div>
         </section>
+
+
+        {/* Gestión de notificaciones push para este operador */}
+<section
+  style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
+>
+  <div style={styles.formGroup}>
+    <label style={styles.label}>🔔 Notificaciones</label>
+    <p style={{ fontSize: '0.875rem', color: '#4b5563', marginBottom: '12px' }}>
+      Activa las notificaciones para recibir avisos cuando te asignen una nueva
+      actividad o cambie tu programación.
+    </p>
+
+    <OperatorNotificationsManager operatorId={operatorId} />
+  </div>
+</section>
+
 
         {/* Tabs de Navegación */}
         <div

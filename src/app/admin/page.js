@@ -441,116 +441,143 @@ const handleOperatorSelectChange = (e) => {
 };
 
 
-  // ---------- Crear asignación (multi-operador) ----------
-const handleCreateAssignment = async (e) => {
-  e.preventDefault();
-  setError('');
+    // ---------- Crear asignación (multi-operador) ----------
+  const handleCreateAssignment = async (e) => {
+    e.preventDefault();
+    setError('');
 
-  if (
-    selectedOperators.length === 0 ||
-    !activity.trim() ||
-    !location.trim() ||
-    !solicitadoPor.trim()
-  ) {
-    setError(
-      'Selecciona al menos un operador y completa actividad, lugar y solicitado por.'
-    );
-    return;
-  }
-
-  if (selectedOperators.length > 3) {
-    setError('Máximo 3 operadores por asignación rápida.');
-    return;
-  }
-
-  try {
-    const createdIds = [];
-
-    for (const operadorId of selectedOperators) {
-      // Para cada operador determinamos el equipo que le corresponde:
-
-      let finalEquipmentId = null;
-
-      // Caso 1: solo hay un operador y el admin eligió equipo manual
-      if (selectedOperators.length === 1 && selectedEquipment) {
-        finalEquipmentId = selectedEquipment;
-      } else {
-        // Caso 2: varios operadores (o uno sin equipo manual) →
-        // buscamos su equipo según la programación semanal
-        const hoy = new Date();
-        const asignacionActiva = weeklyAssignments.find((a) => {
-          const desde = a.fechaInicio?.toDate
-            ? a.fechaInicio.toDate()
-            : new Date(a.fechaInicio);
-          const hasta = a.fechaFin?.toDate
-            ? a.fechaFin.toDate()
-            : new Date(a.fechaFin);
-
-          return (
-            a.operadorId === operadorId &&
-            hoy >= desde &&
-            hoy <= hasta &&
-            a.estado === 'activo'
-          );
-        });
-
-        finalEquipmentId = asignacionActiva ? asignacionActiva.equipoId : null;
-      }
-
-      // Timestamp de creación (cada asignación tendrá su propio serverTimestamp)
-      const nowTs = serverTimestamp();
-
-      const data = {
-        operatorId: operadorId,
-        equipmentId: finalEquipmentId,
-        activity: activity.trim(),
-        location: location.trim(),
-        solicitadoPor: solicitadoPor.trim(),
-        cedulaSolicitante: cedulaSolicitante.trim() || null,
-        centroCosto: centroCosto.trim() || null,
-        telefonoSolicitante: telefonoSolicitante.trim() || null,
-        areaSolicitante: areaSolicitante.trim() || null,
-        status: 'pendiente',
-        createdAt: nowTs,
-        startTime: null,
-        endTime: null,
-        durationMinutes: null,
-        evidences: [],
-      };
-
-      // Enlace con la solicitud pública (si viene desde "Usar para crear asignación")
-      if (linkedRequest) {
-        data.linkedRequestId = linkedRequest.id;
-        data.requestCode = linkedRequest.code || null;
-        data.requestCreatedAt = linkedRequest.createdAt || null;
-      } else {
-        data.linkedRequestId = null;
-        data.requestCode = null;
-        data.requestCreatedAt = nowTs;
-      }
-
-      const created = await addDoc(collection(db, 'assignments'), data);
-      createdIds.push(created.id);
+    if (
+      selectedOperators.length === 0 ||
+      !activity.trim() ||
+      !location.trim() ||
+      !solicitadoPor.trim()
+    ) {
+      setError(
+        'Selecciona al menos un operador y completa actividad, lugar y solicitado por.'
+      );
+      return;
     }
 
-    console.log('✅ Asignaciones creadas:', createdIds);
+    if (selectedOperators.length > 3) {
+      setError('Máximo 3 operadores por asignación rápida.');
+      return;
+    }
 
-    // Limpiar formulario después de crear todas
-    setActivity('');
-    setLocation('');
-    setSolicitadoPor('');
-    setCedulaSolicitante('');
-    setCentroCosto('');
-    setTelefonoSolicitante('');
-    setAreaSolicitante('');
-    setSelectedOperators([]);   // 👈 limpio array
-    setSelectedEquipment('');
-    setLinkedRequest(null);
-  } catch (err) {
-    console.error('Error creando asignaciones:', err);
-    setError('No se pudo crear la asignación. Intenta de nuevo.');
-  }
-};
+    try {
+      const createdIds = [];
+
+      for (const operadorId of selectedOperators) {
+        // Para cada operador determinamos el equipo que le corresponde:
+
+        let finalEquipmentId = null;
+
+        // Caso 1: solo hay un operador y el admin eligió equipo manual
+        if (selectedOperators.length === 1 && selectedEquipment) {
+          finalEquipmentId = selectedEquipment;
+        } else {
+          // Caso 2: varios operadores (o uno sin equipo manual) →
+          // buscamos su equipo según la programación semanal
+          const hoy = new Date();
+          const asignacionActiva = weeklyAssignments.find((a) => {
+            const desde = a.fechaInicio?.toDate
+              ? a.fechaInicio.toDate()
+              : new Date(a.fechaInicio);
+            const hasta = a.fechaFin?.toDate
+              ? a.fechaFin.toDate()
+              : new Date(a.fechaFin);
+
+            return (
+              a.operadorId === operadorId &&
+              hoy >= desde &&
+              hoy <= hasta &&
+              a.estado === 'activo'
+            );
+          });
+
+          finalEquipmentId = asignacionActiva ? asignacionActiva.equipoId : null;
+        }
+
+        // Timestamp de creación (cada asignación tendrá su propio serverTimestamp)
+        const nowTs = serverTimestamp();
+
+        const data = {
+          operatorId: operadorId,
+          equipmentId: finalEquipmentId,
+          activity: activity.trim(),
+          location: location.trim(),
+          solicitadoPor: solicitadoPor.trim(),
+          cedulaSolicitante: cedulaSolicitante.trim() || null,
+          centroCosto: centroCosto.trim() || null,
+          telefonoSolicitante: telefonoSolicitante.trim() || null,
+          areaSolicitante: areaSolicitante.trim() || null,
+          status: 'pendiente',
+          createdAt: nowTs,
+          startTime: null,
+          endTime: null,
+          durationMinutes: null,
+          evidences: [],
+        };
+
+        // Enlace con la solicitud pública (si viene desde "Usar para crear asignación")
+        if (linkedRequest) {
+          data.linkedRequestId = linkedRequest.id;
+          data.requestCode = linkedRequest.code || null;
+          data.requestCreatedAt = linkedRequest.createdAt || null;
+        } else {
+          data.linkedRequestId = null;
+          data.requestCode = null;
+          data.requestCreatedAt = nowTs;
+        }
+
+        const createdRef = await addDoc(collection(db, 'assignments'), data);
+        createdIds.push(createdRef.id);
+
+        // 🔔 NUEVO: notificar al operador que se creó una asignación para él
+        try {
+          const op = operators.find((o) => o.id === operadorId);
+          const operatorName =
+            op?.name || operatorMap[operadorId] || 'Operador';
+
+          await fetch('/api/notify-operator-new-assignment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              assignmentId: createdRef.id,
+              // 👇 este nombre debe coincidir con el campo que guardas en operatorPushTokens
+              operatorId: operadorId,
+              operatorName,
+              activity: data.activity,
+              location: data.location,
+            }),
+          });
+        } catch (pushErr) {
+          console.error(
+            '[PUSH OP] Error llamando a notify-operator-new-assignment:',
+            pushErr
+          );
+          // No rompemos la creación de la asignación si falla el push
+        }
+      }
+
+      console.log('✅ Asignaciones creadas:', createdIds);
+
+      // Limpiar formulario después de crear todas
+      setActivity('');
+      setLocation('');
+      setSolicitadoPor('');
+      setCedulaSolicitante('');
+      setCentroCosto('');
+      setTelefonoSolicitante('');
+      setAreaSolicitante('');
+      setSelectedOperators([]);   // 👈 limpio array
+      setSelectedEquipment('');
+      setLinkedRequest(null);
+    } catch (err) {
+      console.error('Error creando asignaciones:', err);
+      setError('No se pudo crear la asignación. Intenta de nuevo.');
+    }
+  };
+
 
 
 

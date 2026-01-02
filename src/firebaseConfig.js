@@ -3,6 +3,8 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+// 👇 NUEVO: Messaging
+import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -14,10 +16,10 @@ const firebaseConfig = {
 };
 
 // DEBUG: Verifica que las variables se carguen
-console.log('Firebase Config:', {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? '✅ Cargada' : '❌ Faltante',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? '✅ Cargada' : '❌ Faltante',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? '✅ Cargada' : '❌ Faltante'
+console.log("Firebase Config:", {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? "✅ Cargada" : "❌ Faltante",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? "✅ Cargada" : "❌ Faltante",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? "✅ Cargada" : "❌ Faltante",
 });
 
 // ✅ Evita reinicializar en Next (hot reload)
@@ -31,8 +33,18 @@ export const storage = getStorage(app);
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
 
-// 👇 NUEVO: exportar también app como named export
-export { app };
+// 👇 NUEVO: Firebase Cloud Messaging (solo en navegador)
+let messaging = null;
+if (typeof window !== "undefined") {
+  try {
+    messaging = getMessaging(app);
+  } catch (err) {
+    console.warn("No se pudo inicializar Firebase Messaging:", err);
+  }
+}
 
-// 👇 Mantener el export default que ya usabas
+// 🔥 exportamos también messaging
+export { app, messaging };
+
+// Mantener el export default que ya usabas
 export default app;
