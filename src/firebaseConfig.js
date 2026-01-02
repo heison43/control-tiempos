@@ -4,7 +4,7 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 // 👇 NUEVO: Messaging
-import { getMessaging } from "firebase/messaging";
+
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -33,18 +33,9 @@ export const storage = getStorage(app);
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
 
-// 👇 NUEVO: Firebase Cloud Messaging (solo en navegador)
-let messaging = null;
-if (typeof window !== "undefined") {
-  try {
-    messaging = getMessaging(app);
-  } catch (err) {
-    console.warn("No se pudo inicializar Firebase Messaging:", err);
-  }
-}
 
-// 🔥 exportamos también messaging
-export { app, messaging };
+
 
 // Mantener el export default que ya usabas
+export { app };
 export default app;
