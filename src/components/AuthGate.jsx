@@ -1,8 +1,15 @@
 'use client';
-import { useEffect, useState } from 'react';
+
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { auth, provider, db } from '../firebaseConfig';
-import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+import {
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
+  signOut,
+} from 'firebase/auth';
 import {
   doc,
   getDoc,
@@ -16,6 +23,12 @@ import {
 
 function normalizeEmail(email) {
   return email ? email.trim().toLowerCase() : null;
+}
+
+// ✅ Detectar móvil (para usar Redirect en vez de Popup)
+function isMobileBrowser() {
+  if (typeof window === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 export default function AuthGate({ children }) {
@@ -40,6 +53,9 @@ export default function AuthGate({ children }) {
     pathname.startsWith(route)
   );
   const isLoginPage = pathname === '/';
+
+  // ✅ evita que el redirect y el onAuthStateChanged disparen lógica duplicada
+  const redirectHandledRef = useRef(false);
 
   // ✅ Lógica central: obtener/crear usuario + rol en Firestore
   const checkUserAuthorization = async (user) => {
@@ -101,7 +117,7 @@ export default function AuthGate({ children }) {
         return userData.role;
       }
 
-            // 3️⃣ Si no está en users, intentamos asociarlo a un operador
+      // 3️⃣ Si no está en users, intentamos asociarlo a un operador
       console.log(
         'ℹ️ Usuario no existe en users, buscando en operators.authEmail...'
       );
@@ -112,7 +128,10 @@ export default function AuthGate({ children }) {
       if (!opsSnap.empty) {
         const opDoc = opsSnap.docs[0];
         const opData = opDoc.data();
-        console.log('✅ Coincidencia encontrada en operators:', { operatorId: opDoc.id, ...opData });
+        console.log('✅ Coincidencia encontrada en operators:', {
+          operatorId: opDoc.id,
+          ...opData,
+        });
 
         await setDoc(
           userRef,
@@ -127,43 +146,85 @@ export default function AuthGate({ children }) {
           { merge: true }
         );
 
-        console.log('🆕 Usuario creado/actualizado en users como operator (según operators)');
+        console.log(
+          '🆕 Usuario creado/actualizado en users como operator (según operators)'
+        );
         return 'operator';
       }
 
-      
-    
-// 4️⃣ Si no está en admins/users/operators → NO autorizado
-console.log('🚫 Usuario no encontrado en admins/users/operators. Acceso denegado.');
-return false;
-
-
+      // 4️⃣ Si no está en admins/users/operators → NO autorizado
+      console.log(
+        '🚫 Usuario no encontrado en admins/users/operators. Acceso denegado.'
+      );
+      return false;
     } catch (error) {
       console.error('💥 Error verificando autorización:', error);
       return false;
     }
   };
 
+  // ✅ Manejo del resultado del redirect (cuando vuelves desde Google en móvil)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!result?.user) return;
+
+        redirectHandledRef.current = true;
+
+        console.log('✅ Redirect login OK:', result.user.email);
+
+        const role = await checkUserAuthorization(result.user);
+
+        if (role) {
+          const target = role === 'admin' ? '/admin' : '/operador';
+          router.push(target);
+        } else {
+          console.log('🚫 Usuario no autorizado (redirect), cerrando sesión');
+          await signOut(auth);
+          alert('Tu cuenta no está autorizada. Contacta al administrador.');
+          router.push('/');
+        }
+      })
+      .catch((error) => {
+        console.error('💥 getRedirectResult error:', error);
+      })
+      .finally(() => {
+        // si el redirect no retornó usuario, igual no bloqueamos UI
+        // (el onAuthStateChanged se encarga del resto)
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Manejar login con Google (cuenta predeterminada)
   const handleGoogleLogin = async () => {
     console.log('🚀 Iniciando login con cuenta predeterminada...');
     try {
+      setLoading(true);
+
+      // ✅ Móvil: Redirect (evita popup + COOP)
+      if (isMobileBrowser()) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
+      // ✅ PC: Popup
       const result = await signInWithPopup(auth, provider);
       console.log('✅ Login exitoso:', result.user.email);
 
       const role = await checkUserAuthorization(result.user);
 
       if (role) {
-        console.log('🎉 Redirigiendo a:', role);
         router.push(role === 'admin' ? '/admin' : '/operador');
       } else {
-        console.log('🚫 Usuario no autorizado, cerrando sesión');
         await signOut(auth);
         alert('Tu cuenta no está autorizada. Contacta al administrador.');
       }
     } catch (error) {
       console.error('💥 Error en login:', error);
       alert('Error al iniciar sesión. Intenta nuevamente.');
+      setLoading(false);
     }
   };
 
@@ -171,26 +232,34 @@ return false;
   const handleGoogleLoginWithAccountChooser = async () => {
     console.log('🚀 Iniciando login con selector de cuenta...');
     try {
+      setLoading(true);
+
       provider.setCustomParameters({
         prompt: 'select_account',
       });
 
+      // ✅ Móvil: Redirect
+      if (isMobileBrowser()) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
+      // ✅ PC: Popup
       const result = await signInWithPopup(auth, provider);
       console.log('✅ Login exitoso:', result.user.email);
 
       const role = await checkUserAuthorization(result.user);
 
       if (role) {
-        console.log('🎉 Redirigiendo a:', role);
         router.push(role === 'admin' ? '/admin' : '/operador');
       } else {
-        console.log('🚫 Usuario no autorizado, cerrando sesión');
         await signOut(auth);
         alert('Tu cuenta no está autorizada. Contacta al administrador.');
       }
     } catch (error) {
       console.error('💥 Error en login:', error);
       alert('Error al iniciar sesión. Intenta nuevamente.');
+      setLoading(false);
     }
   };
 
@@ -205,7 +274,6 @@ return false;
       if (!user) {
         console.log('👤 No hay usuario autenticado');
 
-        // Si intenta entrar a una ruta protegida sin sesión → mandamos al login
         if (isProtectedRoute) {
           router.push('/');
         }
@@ -214,24 +282,26 @@ return false;
         return;
       }
 
-      // ✅ PORTAL PÚBLICO:
-      // Si estamos en /solicitudes, /solicitud-asignacion o /prestamo-equipo
-      // NO validamos roles internos (admins/users/operators) para evitar:
-      // - crear usuarios en 'users' por accidente
-      // - redirecciones a /admin o /operador
+      // ✅ PORTAL PÚBLICO: no validar roles internos
       if (isPublicRoute && !isProtectedRoute && !isLoginPage) {
         console.log('🌐 Ruta pública: se omite checkUserAuthorization()');
         setLoading(false);
         return;
       }
 
-      // 👉 Sí hay usuario (zona interna)
+      // ✅ Si venimos de redirect, ya validamos ahí. Aquí solo liberamos UI.
+      if (redirectHandledRef.current) {
+        console.log('↩️ Redirect ya manejado, evitando doble validación');
+        setLoading(false);
+        redirectHandledRef.current = false;
+        return;
+      }
+
       const role = await checkUserAuthorization(user);
 
       if (role) {
         console.log('✅ Usuario autenticado y autorizado con rol:', role);
 
-        // Si está en "/" (pantalla de login), lo redirigimos a su panel
         if (isLoginPage) {
           router.push(role === 'admin' ? '/admin' : '/operador');
         }
@@ -239,7 +309,6 @@ return false;
         console.log('🚫 Usuario no autorizado, cerrando sesión');
         await signOut(auth);
 
-        // Si estaba en una ruta protegida o en "/" lo devolvemos al login limpio
         if (isProtectedRoute || isLoginPage) {
           router.push('/');
         }
@@ -256,7 +325,6 @@ return false;
 
   // Loading
   if (loading) {
-    // En rutas públicas no bloqueamos la UI con loading
     if (isPublicRoute && !isLoginPage && !isProtectedRoute) {
       return children;
     }
@@ -272,10 +340,7 @@ return false;
     );
   }
 
-  // 🧷 Si NO hay usuario:
-  // - y estamos en "/" (login)  → mostramos pantalla de login
-  // - o estamos en ruta protegida → también login
-  // - pero si es ruta pública (/solicitudes, etc.) → dejamos pasar al portal
+  // Si NO hay usuario y estamos en login o ruta protegida -> pantalla de login
   if (!auth.currentUser && (isLoginPage || isProtectedRoute)) {
     return (
       <div className="login-container">
@@ -398,7 +463,6 @@ return false;
     );
   }
 
-  // ✅ Usuario autenticado → renderizamos app normalmente
   console.log('🎊 Renderizando aplicación para usuario:', auth.currentUser?.email);
   return children;
 }

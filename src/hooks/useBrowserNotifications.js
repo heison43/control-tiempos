@@ -128,3 +128,18 @@ export function useBrowserNotifications({ role } = {}) {
     initialized,
   };
 }
+// ✅ Añade esto al final del archivo useBrowserNotifications.js
+export function showBrowserNotification(title, options = {}) {
+  try {
+    if (typeof window === "undefined") return;
+    if (!("Notification" in window)) return;
+
+    if (Notification.permission !== "granted") return;
+
+    // Algunos navegadores requieren que sea por interacción del usuario,
+    // pero esto al menos no rompe la app.
+    new Notification(title, options);
+  } catch (e) {
+    console.warn("[NOTIF] No se pudo mostrar notificación:", e);
+  }
+}
