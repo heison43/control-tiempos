@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { db, messaging } from "../firebaseConfig";
+import { db } from '../firebaseConfig'
+import { getFcmToken } from '../firebaseMessaging'
 
 import {
   collection,
@@ -12,7 +13,7 @@ import {
   doc,
   serverTimestamp,
 } from 'firebase/firestore'
-import { getToken, isSupported } from 'firebase/messaging'
+import { isSupported } from 'firebase/messaging'
 
 export default function OperatorNotificationsManager({ operatorId }) {
   const [isActivating, setIsActivating] = useState(false)
@@ -26,7 +27,7 @@ export default function OperatorNotificationsManager({ operatorId }) {
 
     const checkExistingToken = async () => {
       try {
-        const supported = await isSupported()
+        const supported = await isSupported().catch(() => false)
         if (!supported) {
           setStatusText('Notificaciones no soportadas en este navegador')
           return
@@ -37,6 +38,7 @@ export default function OperatorNotificationsManager({ operatorId }) {
           where('operatorId', '==', operatorId)
         )
         const snap = await getDocs(q)
+
         if (!snap.empty) {
           setEnabled(true)
           setStatusText('Notificaciones activadas en este dispositivo')
@@ -63,7 +65,7 @@ export default function OperatorNotificationsManager({ operatorId }) {
         throw new Error('No hay operatorId disponible')
       }
 
-      const supported = await isSupported()
+      const supported = await isSupported().catch(() => false)
       if (!supported) {
         throw new Error('Este navegador no soporta notificaciones push')
       }
@@ -78,19 +80,8 @@ export default function OperatorNotificationsManager({ operatorId }) {
         throw new Error('Permiso de notificaciones no concedido')
       }
 
-      if (!messaging) {
-        throw new Error('Firebase Messaging no está inicializado')
-      }
-
-      // 2️⃣ Obtener token FCM
-      const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-      if (!vapidKey) {
-        console.warn('Falta NEXT_PUBLIC_FIREBASE_VAPID_KEY')
-      }
-
-      const token = await getToken(messaging, {
-        vapidKey,
-      })
+      // 2️⃣ Obtener token FCM (usa tu getter defensivo con SW)
+      const token = await getFcmToken()
 
       if (!token) {
         throw new Error('No se pudo obtener un token de notificación')
@@ -106,6 +97,7 @@ export default function OperatorNotificationsManager({ operatorId }) {
           operatorId,
           token,
           updatedAt: serverTimestamp(),
+          createdAt: serverTimestamp(),
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
         },
         { merge: true }
@@ -115,11 +107,10 @@ export default function OperatorNotificationsManager({ operatorId }) {
       setStatusText('Notificaciones activadas en este dispositivo ✅')
     } catch (err) {
       console.error('Error activando notificaciones de operador:', err)
-      setError(err.message || 'No se pudo activar las notificaciones.')
+      setError(err?.message || 'No se pudo activar las notificaciones.')
       setEnabled(false)
       setStatusText('No se pudieron activar las notificaciones')
     } finally {
-      // ⚠️ Pase lo que pase, que el botón salga del estado “Activando…”
       setIsActivating(false)
     }
   }
@@ -144,7 +135,11 @@ export default function OperatorNotificationsManager({ operatorId }) {
           boxShadow: '0 6px 20px rgba(37,99,235,0.35)',
         }}
       >
-        {isActivating ? 'Activando…' : enabled ? 'Notificaciones activadas' : 'Activar notificaciones'}
+        {isActivating
+          ? 'Activando…'
+          : enabled
+          ? 'Notificaciones activadas'
+          : 'Activar notificaciones'}
       </button>
 
       <span style={{ fontSize: '0.8rem', color: '#4b5563' }}>{statusText}</span>
