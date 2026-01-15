@@ -7,7 +7,7 @@ importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-comp
 
 // ⚠️  config firebaseConfig.js.
 firebase.initializeApp({
-  apiKey: 'AIzaSyDnA3ZHaMALhuVdvmB650x8NojpAvcVoko',
+  apiKey: 'MY_APIKEY',
   authDomain: 'control-tiempos-517a0.firebaseapp.com',
   projectId: 'control-tiempos-517a0',
   storageBucket: 'control-tiempos-517a0.firebasestorage.app',
