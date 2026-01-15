@@ -33,7 +33,7 @@ export async function POST(request) {
 
     if (operatorUid) {
       // ⚠️ IMPORTANTE:
-      // Asegúrate de que OperatorNotificationsManager guarde un campo "operatorUid"
+      // OperatorNotificationsManager guarde un campo "operatorUid"
       // con el mismo valor que usas al asignar el equipo.
       snapshot = await adminDb
         .collection('operatorPushTokens')

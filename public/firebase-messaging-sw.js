@@ -5,15 +5,14 @@
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// ⚠️ Usa aquí la misma config que en tu firebaseConfig.js.
-// Son datos públicos del proyecto, no son secretos.
+// ⚠️  config firebaseConfig.js.
 firebase.initializeApp({
-  apiKey: 'TU_API_KEY',
+  apiKey: 'AIzaSyDnA3ZHaMALhuVdvmB650x8NojpAvcVoko',
   authDomain: 'control-tiempos-517a0.firebaseapp.com',
   projectId: 'control-tiempos-517a0',
-  storageBucket: 'control-tiempos-517a0.appspot.com',
+  storageBucket: 'control-tiempos-517a0.firebasestorage.app',
   messagingSenderId: '696672229185',
-  appId: '1:696672229185:WEB:TU_APP_ID',
+  appId: '1:696672229185:web:7bb886d5793450507cb3c0',
 });
 
 // Instancia de messaging
