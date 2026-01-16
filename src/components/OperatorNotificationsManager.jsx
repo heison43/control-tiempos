@@ -5,12 +5,9 @@ import { db } from '../firebaseConfig'
 import { getFcmToken } from '../firebaseMessaging'
 
 import {
-  collection,
-  query,
-  where,
-  getDocs,
-  setDoc,
   doc,
+  getDoc,
+  setDoc,
   serverTimestamp,
 } from 'firebase/firestore'
 import { isSupported } from 'firebase/messaging'
@@ -21,7 +18,7 @@ export default function OperatorNotificationsManager({ operatorId }) {
   const [error, setError] = useState('')
   const [statusText, setStatusText] = useState('Pulsa para activar')
 
-  // 🔍 Al cargar, ver si ya hay token para este operador
+  // 🔍 Al cargar, ver si ya hay token PARA ESTE operador (sin query)
   useEffect(() => {
     if (!operatorId) return
 
@@ -33,13 +30,10 @@ export default function OperatorNotificationsManager({ operatorId }) {
           return
         }
 
-        const q = query(
-          collection(db, 'operatorPushTokens'),
-          where('operatorId', '==', operatorId)
-        )
-        const snap = await getDocs(q)
+        const ref = doc(db, 'operatorPushTokens', operatorId)
+        const snap = await getDoc(ref)
 
-        if (!snap.empty) {
+        if (snap.exists() && snap.data()?.token) {
           setEnabled(true)
           setStatusText('Notificaciones activadas en este dispositivo')
         } else {
@@ -47,7 +41,7 @@ export default function OperatorNotificationsManager({ operatorId }) {
           setStatusText('Pulsa para activar')
         }
       } catch (err) {
-        console.error('Error comprobando tokens existentes:', err)
+        console.error('Error comprobando token existente:', err)
         setStatusText('No se pudo comprobar el estado de notificaciones')
       }
     }
@@ -61,47 +55,55 @@ export default function OperatorNotificationsManager({ operatorId }) {
     setStatusText('Activando…')
 
     try {
-      if (!operatorId) {
-        throw new Error('No hay operatorId disponible')
-      }
+      if (!operatorId) throw new Error('No hay operatorId disponible')
 
       const supported = await isSupported().catch(() => false)
-      if (!supported) {
-        throw new Error('Este navegador no soporta notificaciones push')
-      }
+      if (!supported) throw new Error('Este navegador no soporta notificaciones push')
 
       if (!('Notification' in window)) {
         throw new Error('Notificaciones no disponibles en este navegador')
       }
 
-      // 1️⃣ Pedir permiso al navegador
+      // 1️⃣ Pedir permiso
       const permission = await Notification.requestPermission()
       if (permission !== 'granted') {
         throw new Error('Permiso de notificaciones no concedido')
       }
 
-      // 2️⃣ Obtener token FCM (usa tu getter defensivo con SW)
+      // 2️⃣ Obtener token
       const token = await getFcmToken()
+      if (!token) throw new Error('No se pudo obtener un token de notificación')
 
-      if (!token) {
-        throw new Error('No se pudo obtener un token de notificación')
+      // 3️⃣ Guardar token en: operatorPushTokens/{operatorId}
+      const ref = doc(db, 'operatorPushTokens', operatorId)
+      const existing = await getDoc(ref)
+
+      if (existing.exists()) {
+        // ya existía → solo actualizar token/updatedAt
+        await setDoc(
+          ref,
+          {
+            operatorId,
+            token,
+            updatedAt: serverTimestamp(),
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          },
+          { merge: true }
+        )
+      } else {
+        // primera vez → crear con createdAt
+        await setDoc(
+          ref,
+          {
+            operatorId,
+            token,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          },
+          { merge: true }
+        )
       }
-
-      // 3️⃣ Guardar/actualizar el token en Firestore
-      // Usamos el token como ID de documento para evitar duplicados
-      const ref = doc(db, 'operatorPushTokens', token)
-
-      await setDoc(
-        ref,
-        {
-          operatorId,
-          token,
-          updatedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-        },
-        { merge: true }
-      )
 
       setEnabled(true)
       setStatusText('Notificaciones activadas en este dispositivo ✅')

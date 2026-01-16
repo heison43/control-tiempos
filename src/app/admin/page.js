@@ -792,6 +792,17 @@ const handleOperatorSelectChange = (e) => {
 
   // ---------- Envío Automático Diario ----------
   useEffect(() => {
+    // ✅ IMPORTANTE:
+    // El envío automático NO debe depender de que el navegador esté abierto.
+    // Para producción se usa el endpoint server-side (/api/sendReportDaily)
+    // disparado por Cron (Vercel) o por el Cron del servidor interno.
+    //
+    // Si por alguna razón necesitas volver a habilitar el schedule en el cliente,
+    // define: NEXT_PUBLIC_ENABLE_CLIENT_DAILY_EMAIL=true
+    const enableClientSchedule =
+      process.env.NEXT_PUBLIC_ENABLE_CLIENT_DAILY_EMAIL === 'true';
+    if (!enableClientSchedule) return;
+
     const sendDailyEmail = async () => {
       try {
         const today = new Date();

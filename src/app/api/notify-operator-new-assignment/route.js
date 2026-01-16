@@ -15,7 +15,7 @@ export async function POST(request) {
     const body = await request.json();
     const {
       assignmentId,
-      operatorUid,
+      operatorId,
       operatorName = 'Operador',
       activity = 'una actividad',
       location = 'sin lugar especificado',
@@ -31,13 +31,13 @@ export async function POST(request) {
     // 1️⃣ Buscar tokens del operador
     let snapshot;
 
-    if (operatorUid) {
-      // ⚠️ IMPORTANTE:
-      // OperatorNotificationsManager guarde un campo "operatorUid"
-      // con el mismo valor que usas al asignar el equipo.
+    if (operatorId) {
+      // ✅ IMPORTANTE:
+      // OperatorNotificationsManager guarda "operatorId" (OP001, OP002, etc.)
+      // y es el mismo valor que se usa en assignments.operatorId.
       snapshot = await adminDb
         .collection('operatorPushTokens')
-        .where('operatorUid', '==', operatorUid)
+        .where('operatorId', '==', operatorId)
         .get();
     } else {
       // Fallback: todos los tokens de operadores (menos fino, pero funciona)
@@ -73,7 +73,7 @@ export async function POST(request) {
       data: {
         type: 'NEW_ASSIGNMENT',
         assignmentId,
-        operatorUid: operatorUid || '',
+        operatorId: operatorId || '',
         operatorName,
         activity,
         location,

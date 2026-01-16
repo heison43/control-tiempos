@@ -1,10 +1,9 @@
 // src/firebaseConfig.js
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore"; // ✅ CAMBIO
 import { getStorage } from "firebase/storage";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 // 👇 NUEVO: Messaging
-
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -25,16 +24,18 @@ console.log("Firebase Config:", {
 // ✅ Evita reinicializar en Next (hot reload)
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Firestore / Storage
-export const db = getFirestore(app);
+// ✅ Firestore (modo compatible con redes corporativas / proxy / QUIC bloqueado)
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false,
+});
+
+// Storage
 export const storage = getStorage(app);
 
 // ✅ Auth + Google Provider
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
-
-
-
 
 // Mantener el export default que ya usabas
 export { app };

@@ -1,7 +1,7 @@
 // src/components/NotificationsManager.jsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../firebaseConfig';
 import {
   collection,
@@ -42,6 +42,11 @@ export default function NotificationsManager({ role = 'admin' }) {
   const [browserPermission, setBrowserPermission] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   );
+
+  // ✅ Evitar que en el primer load dispare “flood” de notificaciones.
+  // En Android y algunos navegadores móviles, `new Notification()` puede lanzar error.
+  const isFirstSnapshotRef = useRef(true);
+  const prevIdsRef = useRef(new Set());
 
   const storageKey = useMemo(
     () => `ct_notifications_read_${role}`,
@@ -90,26 +95,37 @@ export default function NotificationsManager({ role = 'admin' }) {
           };
         });
 
-        setNotifications((prev) => {
-          // Detectar si hay docs nuevos para mostrar notificación del navegador
-          const prevIds = new Set(prev.map((n) => n.id));
-          const newOnes = items.filter((n) => !prevIds.has(n.id));
+        // Detectar docs nuevos (comparando contra el snapshot anterior)
+        const prevIds = prevIdsRef.current;
+        const currentIds = new Set(items.map((n) => n.id));
+        const newOnes = items.filter((n) => !prevIds.has(n.id));
 
-          if (
-            newOnes.length > 0 &&
-            typeof window !== 'undefined' &&
-            typeof Notification !== 'undefined' &&
-            Notification.permission === 'granted'
-          ) {
-            newOnes.forEach((n) => {
+        // Actualizar refs antes de notificar
+        prevIdsRef.current = currentIds;
+
+        // ✅ Nunca notificar en el primer snapshot (evita notificar “todo lo pendiente”)
+        const canNotify =
+          !isFirstSnapshotRef.current &&
+          typeof window !== 'undefined' &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted';
+
+        if (canNotify && newOnes.length > 0) {
+          newOnes.forEach((n) => {
+            try {
+              // En móvil/pestaña normal esto puede fallar; por eso lo envolvemos.
               new Notification('Nueva solicitud de asignación', {
                 body: `${n.requester} solicitó equipo para ${n.activity}`,
               });
-            });
-          }
+            } catch (e) {
+              console.warn('[Notifications] No se pudo mostrar Notification():', e);
+            }
+          });
+        }
 
-          return items;
-        });
+        isFirstSnapshotRef.current = false;
+
+        setNotifications(items);
 
         setLoading(false);
       },
