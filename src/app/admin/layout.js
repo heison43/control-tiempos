@@ -1,94 +1,86 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, db } from '../../firebaseConfig';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { useSession, signOut } from 'next-auth/react';
+import { ensureAuthorizedUser } from '../../lib/userAccess';
 
 import '../admin-styles.css';
 
 export default function AdminLayout({ children }) {
-  const [status, setStatus] = useState('checking'); // 'checking' | 'allowed' | 'denied'
-  const [user, setUser] = useState(null);
-  const [userMeta, setUserMeta] = useState(null); // 👈 NUEVO: metadata del usuario (rol, etc.)
+  const { data: session, status: sessionStatus } = useSession();
+  const [status, setStatus] = useState('checking'); // checking | allowed | denied
+  const [userMeta, setUserMeta] = useState(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    console.log('👀 AdminLayout montado, verificando usuario...');
+    let active = true;
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    async function validate() {
       try {
-        if (!currentUser) {
-          console.log('🔒 [Admin] No hay usuario autenticado, redirigiendo a /');
+        if (sessionStatus === 'loading') return;
+
+        if (sessionStatus === 'unauthenticated') {
+          if (active) {
+            setStatus('denied');
+            router.push('/');
+          }
+          return;
+        }
+
+        const result = await ensureAuthorizedUser({
+          email: session?.user?.email,
+          name: session?.user?.name,
+        });
+
+        if (!active) return;
+
+        if (!result.ok) {
           setStatus('denied');
+          await signOut({ redirect: false });
           router.push('/');
           return;
         }
 
-        console.log('👤 [Admin] Usuario autenticado:', currentUser.email);
-
-        const userRef = doc(db, 'users', currentUser.email);
-        const snap = await getDoc(userRef);
-
-        if (!snap.exists()) {
-          console.log('❌ [Admin] Documento de usuario no existe en Firestore');
-          setStatus('denied');
-          await signOut(auth);
-          router.push('/');
-          return;
-        }
-
-        const data = snap.data();
-        console.log('📄 [Admin] Datos usuario:', data);
-        setUserMeta(data); // 👈 guardamos la metadata para el header
-
-        // Admin o SuperAdmin válido
-        if (
-          (data.role === 'admin' || data.role === 'superAdmin') && // 👈 ahora acepta superAdmin
-          data.isActive !== false
-        ) {
-          console.log('✅ [Admin] Usuario autorizado como ADMIN / SUPERADMIN');
-          setUser(currentUser);
+        if ((result.role === 'admin' || result.role === 'superAdmin')) {
+          setUserMeta(result.meta || null);
           setStatus('allowed');
           return;
         }
 
-        // Si es operador, lo mandamos a /operador
-        if (data.role === 'operator' && data.isActive !== false) {
-          console.log('➡️ [Admin] Usuario es OPERATOR, redirigiendo a /operador');
+        if (result.role === 'operator') {
           setStatus('denied');
           router.push('/operador');
           return;
         }
 
-        // Cualquier otro caso: sin permiso
-        console.log('🚫 [Admin] Usuario sin rol válido o inactivo');
         setStatus('denied');
-        await signOut(auth);
+        await signOut({ redirect: false });
         router.push('/');
       } catch (err) {
         console.error('💥 [Admin] Error verificando permisos:', err);
-        setStatus('denied');
-        router.push('/');
+        if (active) {
+          setStatus('denied');
+          router.push('/');
+        }
       }
-    });
+    }
 
+    validate();
     return () => {
-      console.log('🧹 [Admin] Limpiando listener');
-      unsubscribe();
+      active = false;
     };
-  }, [router]);
+  }, [router, session, sessionStatus]);
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await signOut({ callbackUrl: '/' });
     } catch (e) {
       console.error('💥 [Admin] Error al cerrar sesión:', e);
     }
   };
 
-  if (status === 'checking') {
+  if (status === 'checking' || sessionStatus === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -100,7 +92,6 @@ export default function AdminLayout({ children }) {
   }
 
   if (status === 'denied') {
-    // Normalmente se verá solo un momento mientras redirige
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <p className="text-xs text-gray-600">Redirigiendo...</p>
@@ -108,32 +99,25 @@ export default function AdminLayout({ children }) {
     );
   }
 
-  // status === 'allowed'
-  const initials = (user?.displayName || user?.email || 'A')
+  const displayName = session?.user?.name || session?.user?.email || 'Admin';
+  const initials = displayName
     .split(' ')
     .map((p) => p[0])
     .join('')
     .slice(0, 2)
     .toUpperCase();
 
-  // 👇 NUEVO: etiqueta de rol para el badge
-  const roleLabel =
-    userMeta?.role === 'superAdmin'
-      ? 'Super Admin'
-      : 'Admin';
+  const roleLabel = userMeta?.role === 'superAdmin' ? 'Super Admin' : 'Admin';
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header Super Compacto - Estilo Chino */}
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-3">
           <div className="flex justify-between items-center h-10">
-            {/* Logo Minimalista */}
             <div className="flex items-center space-x-2">
               <span className="text-sm font-medium text-gray-900">MiningSoft</span>
             </div>
 
-            {/* Botón de Usuario Super Compacto */}
             <div className="relative">
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -154,13 +138,9 @@ export default function AdminLayout({ children }) {
                 </svg>
               </button>
 
-              {/* Dropdown */}
               {dropdownOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setDropdownOpen(false)}
-                  />
+                  <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
                   <div className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-50 py-1">
                     <div className="px-3 py-2 border-b border-gray-100">
                       <div className="flex items-center space-x-2">
@@ -168,16 +148,12 @@ export default function AdminLayout({ children }) {
                           <span className="text-white text-xs font-medium">{initials}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-gray-900 truncate">
-                            {user?.displayName || 'Admin'}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                          <p className="text-xs font-medium text-gray-900 truncate">{displayName}</p>
+                          <p className="text-xs text-gray-500 truncate">{session?.user?.email}</p>
                         </div>
                       </div>
                       <div className="flex items-center justify-between mt-1">
-                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
-                          {roleLabel}
-                        </span>
+                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">{roleLabel}</span>
                         <div className="flex items-center space-x-1">
                           <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
                           <span className="text-xs text-gray-500">Online</span>
@@ -185,7 +161,6 @@ export default function AdminLayout({ children }) {
                       </div>
                     </div>
 
-                    {/* Cerrar Sesión */}
                     <div className="border-t border-gray-100 pt-1">
                       <button
                         onClick={handleLogout}
@@ -199,7 +174,7 @@ export default function AdminLayout({ children }) {
                             d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
                           />
                         </svg>
-                        <span>Cerrar Sesión</span>
+                        <span>Cerrar sesión</span>
                       </button>
                     </div>
                   </div>
@@ -210,9 +185,7 @@ export default function AdminLayout({ children }) {
         </div>
       </header>
 
-      {/* Contenido Principal */}
-      <main className="max-w-7xl mx-auto px-3 py-4">{children}</main>
+      {children}
     </div>
   );
 }
-

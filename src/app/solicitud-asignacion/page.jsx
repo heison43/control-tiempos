@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { db, auth } from '../../firebaseConfig';
+import { db } from '../../firebaseConfig';
+import { signIn, signOut, useSession } from 'next-auth/react';
+import PortalMicrosoftGuard from '../../components/PortalMicrosoftGuard';
 import {
   collection,
   addDoc,
@@ -13,16 +15,7 @@ import {
   limit,
   onSnapshot,
   orderBy,
-  setDoc,
-  doc,
 } from 'firebase/firestore';
-import {
-  onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-} from 'firebase/auth';
 
 const PROFILE_STORAGE_KEY = 'ctiempos_solicitante';
 
@@ -83,15 +76,18 @@ export default function SolicitudAsignacionPage() {
   const [lookupResult, setLookupResult] = useState(null);
   const [lookupError, setLookupError] = useState('');
 
-  // Portal Auth (email/password)
-  const [portalUser, setPortalUser] = useState(null);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState('login'); // login | register
-  const [authName, setAuthName] = useState('');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPass, setAuthPass] = useState('');
-  const [authError, setAuthError] = useState('');
-  const [authBusy, setAuthBusy] = useState(false);
+  const { data: session } = useSession();
+
+  // Sesión corporativa con Microsoft (fase 1)
+  const portalUser = useMemo(() => {
+    const email = normalizeEmail(session?.user?.email);
+    if (!email) return null;
+    return {
+      uid: email,
+      email,
+      displayName: session?.user?.name || '',
+    };
+  }, [session?.user?.email, session?.user?.name]);
 
   // Mis solicitudes
   const [myRequests, setMyRequests] = useState([]);
@@ -100,17 +96,16 @@ export default function SolicitudAsignacionPage() {
   // Panel derecho: tab
   const [rightTab, setRightTab] = useState('mine'); // mine | code
 
-  // 1) Escuchar auth del portal (email/password)
+  // 1) Prefill con sesión corporativa
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setPortalUser(u || null);
-      if (u) {
-        setAuthOpen(false);
-        setAuthError('');
-      }
-    });
-    return () => unsub();
-  }, []);
+    if (!portalUser) return;
+
+    setForm((prev) => ({
+      ...prev,
+      requesterName: prev.requesterName || portalUser.displayName || '',
+      requesterEmail: prev.requesterEmail || portalUser.email || '',
+    }));
+  }, [portalUser]);
 
   // 2) Cargar perfil guardado en localStorage
   useEffect(() => {
@@ -145,7 +140,7 @@ export default function SolicitudAsignacionPage() {
     setMyLoading(true);
     const qMine = query(
       collection(db, 'assignmentRequests'),
-      where('createdByUid', '==', portalUser.uid),
+      where('createdByEmail', '==', normalizeEmail(portalUser.email)),
       orderBy('createdAt', 'desc'),
       limit(25)
     );
@@ -164,86 +159,17 @@ export default function SolicitudAsignacionPage() {
     );
 
     return () => unsub();
-  }, [portalUser?.uid]);
+  }, [portalUser?.email]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // -------- Portal Auth handlers --------
-  const openAuth = (mode = 'login') => {
-    setAuthMode(mode);
-    setAuthError('');
-    setAuthOpen(true);
-    setAuthEmail(form.requesterEmail || authEmail || '');
-    setAuthName(form.requesterName || authName || '');
-  };
-
-  const handleAuthSubmit = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    setAuthBusy(true);
-
-    try {
-      const email = normalizeEmail(authEmail);
-      if (!email) throw new Error('Ingresa un correo válido.');
-      if (!authPass || authPass.length < 6) {
-        throw new Error('La clave debe tener al menos 6 caracteres.');
-      }
-
-      if (authMode === 'register') {
-        const cred = await createUserWithEmailAndPassword(auth, email, authPass);
-
-        // Guardamos nombre (displayName) solo para UX
-        if (authName?.trim()) {
-          await updateProfile(cred.user, { displayName: authName.trim() });
-        }
-
-        // Guardamos un doc separado del sistema interno
-        await setDoc(
-          doc(db, 'portalUsers', cred.user.uid),
-          {
-            uid: cred.user.uid,
-            email,
-            name: (authName || cred.user.displayName || '').trim(),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        // Autollenar formulario con lo que registró
-        setForm((prev) => ({
-          ...prev,
-          requesterName: authName?.trim() || prev.requesterName,
-          requesterEmail: email,
-        }));
-      } else {
-        await signInWithEmailAndPassword(auth, email, authPass);
-
-        // autollenar
-        setForm((prev) => ({
-          ...prev,
-          requesterEmail: email,
-        }));
-      }
-
-      setAuthPass('');
-      setAuthOpen(false);
-    } catch (err) {
-      console.error(err);
-      setAuthError(err?.message || 'Error de autenticación.');
-    } finally {
-      setAuthBusy(false);
-    }
-  };
 
   const handlePortalLogout = async () => {
     try {
-      await signOut(auth);
-      setMyRequests([]);
-      setRightTab('code');
+      await signOut({ callbackUrl: '/' });
     } catch (e) {
       console.error(e);
     }
@@ -256,11 +182,9 @@ const handleSubmit = async (e) => {
   setLastTrackingCode('');
 
   // ✅ Requerimos sesión para que el usuario vea “Mis solicitudes”
-  if (!portalUser?.uid) {
-    setSubmitMessage(
-      'Para enviar y visualizar tus solicitudes, primero debes iniciar sesión o crear una cuenta.'
-    );
-    openAuth('login');
+  if (!portalUser?.email) {
+    setSubmitMessage('Debes iniciar sesión con tu cuenta Microsoft corporativa para enviar la solicitud.');
+    await signIn('azure-ad', { callbackUrl: '/solicitud-asignacion' });
     return;
   }
 
@@ -425,11 +349,12 @@ const handleSubmit = async (e) => {
   const portalBadge = useMemo(() => {
     if (!portalUser) return null;
     const email = portalUser.email || '';
-    const name = portalUser.displayName || 'Usuario';
+    const name = portalUser.displayName || 'Usuario corporativo';
     return { name, email };
   }, [portalUser]);
 
   return (
+    <PortalMicrosoftGuard callbackUrl="/solicitud-asignacion">
     <div className="page">
       <div className="content">
         <Link href="/solicitudes" className="back-link">
@@ -452,26 +377,15 @@ const handleSubmit = async (e) => {
           </div>
 
           <div className="account">
-            {!portalUser ? (
-              <>
-                <button className="btn btn--ghost" onClick={() => openAuth('login')}>
-                  Iniciar sesión
-                </button>
-                <button className="btn btn--primary" onClick={() => openAuth('register')}>
-                  Crear cuenta
-                </button>
-              </>
-            ) : (
-              <div className="account__box">
-                <div className="account__meta">
-                  <div className="account__name">{portalBadge?.name}</div>
-                  <div className="account__email">{portalBadge?.email}</div>
-                </div>
-                <button className="btn btn--ghost" onClick={handlePortalLogout}>
-                  Salir
-                </button>
+            <div className="account__box">
+              <div className="account__meta">
+                <div className="account__name">{portalBadge?.name}</div>
+                <div className="account__email">{portalBadge?.email}</div>
               </div>
-            )}
+              <button className="btn btn--ghost" onClick={handlePortalLogout}>
+                Salir
+              </button>
+            </div>
           </div>
         </header>
 
@@ -485,11 +399,9 @@ const handleSubmit = async (e) => {
               </p>
             </div>
 
-            {!portalUser && (
-              <div className="notice">
-                <strong>Recomendación:</strong> inicia sesión o crea una cuenta para que puedas ver todas tus solicitudes en este mismo panel.
-              </div>
-            )}
+            <div className="notice">
+              <strong>Sesión corporativa activa:</strong> las solicitudes quedarán asociadas a tu cuenta Microsoft para que puedas consultarlas en este mismo panel.
+            </div>
 
             <form className="form" onSubmit={handleSubmit}>
               <div className="form__group form__group--two">
@@ -651,10 +563,9 @@ const handleSubmit = async (e) => {
               <>
                 {!portalUser ? (
                   <div className="empty">
-                    <p><strong>Inicia sesión</strong> para ver todas tus solicitudes aquí.</p>
+                    <p><strong>Debes iniciar sesión con Microsoft</strong> para ver tus solicitudes.</p>
                     <div className="empty__actions">
-                      <button className="btn btn--ghost" onClick={() => openAuth('login')}>Iniciar sesión</button>
-                      <button className="btn btn--primary" onClick={() => openAuth('register')}>Crear cuenta</button>
+                      <button className="btn btn--primary" onClick={() => signIn('azure-ad', { callbackUrl: '/solicitud-asignacion' })}>Continuar con Microsoft</button>
                     </div>
                     <p className="hint">
                       Si ya tienes un código de seguimiento, usa la pestaña “Consultar por código”.
@@ -791,76 +702,6 @@ const handleSubmit = async (e) => {
           </section>
         </main>
       </div>
-
-      {/* Modal auth */}
-      {authOpen && (
-        <div className="modal-overlay" onMouseDown={() => setAuthOpen(false)}>
-          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="modal__header">
-              <h3 className="modal__title">
-                {authMode === 'register' ? 'Crear cuenta' : 'Iniciar sesión'}
-              </h3>
-              <button className="modal__close" onClick={() => setAuthOpen(false)} type="button">
-                ✕
-              </button>
-            </div>
-
-            <p className="modal__subtitle">
-              Esto te permite ver <strong>tus solicitudes</strong> en este panel (sin Google).
-            </p>
-
-            <form onSubmit={handleAuthSubmit} className="modal__form">
-              {authMode === 'register' && (
-                <div className="modal__field">
-                  <label>Nombre</label>
-                  <input value={authName} onChange={(e) => setAuthName(e.target.value)} placeholder="Ej: Pedro Pérez" />
-                </div>
-              )}
-
-              <div className="modal__field">
-                <label>Correo</label>
-                <input
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  type="email"
-                  placeholder="correo@empresa.com"
-                  required
-                />
-              </div>
-
-              <div className="modal__field">
-                <label>Clave</label>
-                <input
-                  value={authPass}
-                  onChange={(e) => setAuthPass(e.target.value)}
-                  type="password"
-                  placeholder="Mínimo 6 caracteres"
-                  required
-                />
-              </div>
-
-              {authError && <div className="modal__error">{authError}</div>}
-
-              <div className="modal__actions">
-                <button className="btn btn--primary" type="submit" disabled={authBusy}>
-                  {authBusy ? 'Procesando…' : authMode === 'register' ? 'Crear cuenta' : 'Entrar'}
-                </button>
-
-                <button
-                  className="btn btn--ghost"
-                  type="button"
-                  onClick={() => {
-                    setAuthMode(authMode === 'register' ? 'login' : 'register');
-                    setAuthError('');
-                  }}
-                >
-                  {authMode === 'register' ? 'Ya tengo cuenta' : 'Crear una cuenta'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       <style jsx>{`
         .page,
@@ -1229,5 +1070,6 @@ const handleSubmit = async (e) => {
         }
       `}</style>
     </div>
+    </PortalMicrosoftGuard>
   );
 }

@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
+import { useSession } from 'next-auth/react';
+import PortalMicrosoftGuard from '../../components/PortalMicrosoftGuard';
 import { db } from '../../firebaseConfig';
 import {
   addDoc,
@@ -256,6 +258,12 @@ function statusLabel(estado: string) {
 }
 
 export default function PrestamoEquipoPage() {
+  const { data: session } = useSession();
+  const corporateUser = useMemo(() => ({
+    name: session?.user?.name || '',
+    email: session?.user?.email || '',
+  }), [session?.user?.name, session?.user?.email]);
+
   const [enviando, setEnviando] = useState(false);
   const [mensajeOk, setMensajeOk] = useState('');
   const [codigoGenerado, setCodigoGenerado] = useState('');
@@ -285,6 +293,7 @@ export default function PrestamoEquipoPage() {
       const lugarUso = String(data.get('lugarUso') || '').trim();
       const equipoRequerido = String(data.get('equipoRequerido') || '').trim();
       const motivo = String(data.get('motivo') || '').trim();
+      const requesterEmail = String(corporateUser.email || '').trim().toLowerCase();
 
       const desdeStr = String(data.get('desde') || '');
       const hastaStr = String(data.get('hasta') || '');
@@ -326,6 +335,11 @@ export default function PrestamoEquipoPage() {
         // equipo y motivo
         equipmentRequested: equipoRequerido,
         purpose: motivo,
+
+        // vínculo temporal con identidad Microsoft (fase 1)
+        createdByEmail: requesterEmail || null,
+        createdByName: corporateUser.name || nombreCompleto,
+        authProvider: 'microsoft',
 
         // estos los llenará el admin al aprobar / entregar / devolver
         approvedFrom: null,
@@ -441,6 +455,7 @@ export default function PrestamoEquipoPage() {
   };
 
   return (
+    <PortalMicrosoftGuard callbackUrl="/prestamo-equipo">
     <main style={styles.page}>
       <div style={styles.container}>
         <div style={styles.card}>
@@ -472,6 +487,7 @@ export default function PrestamoEquipoPage() {
 
           {/* Formulario */}
           <form onSubmit={handleSubmit}>
+            <input type="hidden" name="requesterEmail" value={corporateUser.email || ''} readOnly />
             <div style={styles.formGrid}>
               {/* Datos del solicitante */}
               <section style={styles.groupCard}>
@@ -485,6 +501,7 @@ export default function PrestamoEquipoPage() {
                     <input
                       name="nombreCompleto"
                       type="text"
+                      defaultValue={corporateUser.name || ''}
                       placeholder="Ej: Juan Pérez"
                       style={styles.input}
                       required
@@ -775,5 +792,6 @@ export default function PrestamoEquipoPage() {
         </div>
       </div>
     </main>
+    </PortalMicrosoftGuard>
   );
 }

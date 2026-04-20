@@ -56,5 +56,6 @@ initAdmin();
 
 // Si no hay adminApp, exportamos null para que la API lo maneje sin romper
 export const adminDb = adminApp ? admin.firestore() : null;
+export const adminAuth = adminApp ? admin.auth() : null;
 export const adminMessaging = adminApp ? admin.messaging() : null;
 

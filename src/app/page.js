@@ -2,89 +2,82 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, db } from '../firebaseConfig';
-import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  onAuthStateChanged,
-  signOut,
-} from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-
-const provider = new GoogleAuthProvider();
+import { signIn, signOut, useSession } from 'next-auth/react';
+import { ensureAuthorizedUser } from '../lib/userAccess';
 
 export default function HomePage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState('');
 
-  // Si ya hay sesión, redirigimos a admin u operador
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    let isMounted = true;
+
+    async function resolveAccess() {
       try {
-        if (!user) {
+        if (status === 'loading') return;
+
+        if (status === 'unauthenticated') {
+          if (isMounted) setChecking(false);
+          return;
+        }
+
+        const email = session?.user?.email;
+        const name = session?.user?.name;
+        const result = await ensureAuthorizedUser({ email, name });
+
+        if (!isMounted) return;
+
+        if (!result.ok) {
+          setError('Tu usuario no está autorizado en el sistema.');
+          await signOut({ redirect: false });
           setChecking(false);
           return;
         }
 
-        const ref = doc(db, 'users', user.email);
-        const snap = await getDoc(ref);
-
-        if (!snap.exists()) {
-          setError('Tu usuario no está registrado en el sistema.');
-          await signOut(auth);
-          setChecking(false);
-          return;
-        }
-
-        const data = snap.data();
-
-        if (data.isActive === false) {
-          setError('Tu usuario está inactivo. Consulta con el administrador.');
-          await signOut(auth);
-          setChecking(false);
-          return;
-        }
-
-        if (data.role === 'admin' || data.role === 'superAdmin') {
+        if (result.role === 'admin' || result.role === 'superAdmin') {
           router.push('/admin');
           return;
         }
 
-        if (data.role === 'operator') {
+        if (result.role === 'operator') {
           router.push('/operador');
           return;
         }
 
         setError('No tienes permisos para ingresar al sistema.');
-        await signOut(auth);
+        await signOut({ redirect: false });
         setChecking(false);
       } catch (e) {
         console.error('Error verificando sesión:', e);
-        setError('Ocurrió un error al validar tu usuario.');
-        setChecking(false);
+        if (isMounted) {
+          setError('Ocurrió un error al validar tu usuario.');
+          setChecking(false);
+        }
       }
-    });
+    }
 
-    return () => unsub();
-  }, [router]);
+    resolveAccess();
 
-  const handleGoogleLogin = async (forceSelect = false) => {
+    return () => {
+      isMounted = false;
+    };
+  }, [router, session, status]);
+
+  const handleMicrosoftLogin = async () => {
     try {
       setError('');
-      provider.setCustomParameters(
-        forceSelect ? { prompt: 'select_account' } : {}
-      );
-      await signInWithPopup(auth, provider);
-      // el onAuthStateChanged se encarga del redirect
+      await signIn('azure-ad', {
+        callbackUrl: '/',
+      });
     } catch (e) {
-      console.error('Error en login Google:', e);
-      setError('No se pudo iniciar sesión. Intenta de nuevo.');
+      console.error('Error en login Microsoft:', e);
+      setError('No se pudo iniciar sesión con Microsoft. Intenta de nuevo.');
     }
   };
 
-  // Mientras valida sesión
-  if (checking) {
+  if (checking || status === 'loading') {
     return (
       <div className="login-page">
         <div className="login-loading">
@@ -137,21 +130,12 @@ export default function HomePage() {
             <span>⏱️</span>
           </div>
           <h1>Gestión de Equipos</h1>
-          <p>Gestión integral de equipos, operadores y solicitudes..</p>
+          <p>Ingreso corporativo con cuenta Microsoft</p>
         </div>
 
         <div className="login-actions">
-          <button
-            className="btn btn-primary"
-            onClick={() => handleGoogleLogin(false)}
-          >
-            Continuar con Google
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => handleGoogleLogin(true)}
-          >
-            Usar otra cuenta
+          <button className="btn btn-primary" onClick={handleMicrosoftLogin}>
+            Continuar con Microsoft
           </button>
         </div>
 
@@ -161,14 +145,13 @@ export default function HomePage() {
           <p>
             Acceso exclusivo para personal autorizado.
             <br />
-            El portal de solicitudes público está disponible en:{' '}
+            El portal de solicitudes corporativo está disponible en:{' '}
             <span className="login-link">/solicitudes</span>
           </p>
-          <p className="login-copy">© 2025 Gestión de Equipos • v1.0</p>
+          <p className="login-copy">© 2026 Gestión de Equipos • v1.1</p>
         </div>
       </div>
 
-      {/* ESTILOS SOLO PARA ESTA PANTALLA */}
       <style jsx>{`
         .login-page {
           min-height: 100vh;
@@ -187,7 +170,7 @@ export default function HomePage() {
         .login-card {
           width: 100%;
           max-width: 420px;
-          background: rgba(15, 23, 42, 0.96); /* 👈 TODO oscuro, sin bloque blanco */
+          background: rgba(15, 23, 42, 0.96);
           border-radius: 20px;
           padding: 20px 22px 18px;
           box-shadow: 0 24px 60px rgba(15, 23, 42, 0.9);
@@ -199,7 +182,6 @@ export default function HomePage() {
         .login-header {
           text-align: center;
           margin-bottom: 18px;
-          background: transparent; /* 👈 sin fondo blanco */
         }
 
         .login-icon {
@@ -210,8 +192,8 @@ export default function HomePage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #4f46e5, #38bdf8);
-          box-shadow: 0 10px 25px rgba(59, 130, 246, 0.6);
+          background: linear-gradient(135deg, #2563eb, #0ea5e9);
+          box-shadow: 0 10px 25px rgba(37, 99, 235, 0.55);
           font-size: 26px;
         }
 
@@ -219,7 +201,8 @@ export default function HomePage() {
           font-size: 1.4rem;
           font-weight: 700;
           letter-spacing: 0.03em;
-          color: #f9fafb; /* 👈 bien visible sobre oscuro */
+          color: #f9fafb;
+          margin: 0;
         }
 
         .login-header p {
@@ -238,9 +221,9 @@ export default function HomePage() {
         .btn {
           width: 100%;
           border-radius: 999px;
-          padding: 8px 14px;
-          font-size: 0.9rem;
-          font-weight: 500;
+          padding: 10px 14px;
+          font-size: 0.95rem;
+          font-weight: 600;
           border: none;
           cursor: pointer;
           display: inline-flex;
@@ -248,69 +231,45 @@ export default function HomePage() {
           justify-content: center;
           transition: transform 0.08s ease, box-shadow 0.15s ease,
             background 0.15s ease, color 0.15s ease;
-          white-space: nowrap;
         }
 
         .btn-primary {
-          background: linear-gradient(135deg, #4f46e5, #38bdf8);
+          background: linear-gradient(135deg, #2563eb, #0ea5e9);
           color: #f9fafb;
-          box-shadow: 0 12px 30px rgba(59, 130, 246, 0.55);
+          box-shadow: 0 12px 30px rgba(37, 99, 235, 0.55);
         }
 
         .btn-primary:hover {
           transform: translateY(-1px);
-          box-shadow: 0 14px 40px rgba(56, 189, 248, 0.65);
-        }
-
-        .btn-secondary {
-          background: transparent;
-          color: #e5e7eb;
-          border: 1px solid rgba(148, 163, 184, 0.7);
-        }
-
-        .btn-secondary:hover {
-          background: rgba(15, 23, 42, 0.9);
         }
 
         .login-error {
-          margin-top: 6px;
-          padding: 6px 8px;
-          border-radius: 10px;
-          background: rgba(220, 38, 38, 0.1);
-          border: 1px solid rgba(248, 113, 113, 0.7);
-          font-size: 0.8rem;
+          margin: 0 0 12px;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(127, 29, 29, 0.32);
+          border: 1px solid rgba(248, 113, 113, 0.4);
           color: #fecaca;
+          font-size: 0.85rem;
           text-align: center;
         }
 
         .login-footer {
-          margin-top: 10px;
-          border-top: 1px dashed rgba(148, 163, 184, 0.5);
-          padding-top: 8px;
-          font-size: 0.78rem;
-          color: #9ca3af;
+          margin-top: 14px;
           text-align: center;
+          font-size: 0.78rem;
+          color: #cbd5e1;
+          line-height: 1.55;
         }
 
         .login-link {
-          color: #e0f2fe;
+          color: #7dd3fc;
           font-weight: 600;
         }
 
         .login-copy {
-          margin-top: 6px;
-          font-size: 0.75rem;
-          color: #6b7280;
-        }
-
-        @media (max-width: 480px) {
-          .login-card {
-            padding: 18px 16px 16px;
-          }
-
-          .login-header h1 {
-            font-size: 1.2rem;
-          }
+          margin-top: 8px;
+          opacity: 0.75;
         }
       `}</style>
     </div>

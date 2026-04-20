@@ -1,16 +1,16 @@
-// src/app/layout.js
-import "./globals.css";
-import PwaInstallPrompt from "../components/PwaInstallPrompt";
+import './globals.css';
+import PwaInstallPrompt from '../components/PwaInstallPrompt';
+import SessionProviderClient from '../components/SessionProviderClient';
 
 export const metadata = {
-  title: "Gestión de Equipos",
-  description: "Sistema de Gestion de Equipos",
-  manifest: "/manifest.webmanifest",
+  title: 'Gestión de Equipos',
+  description: 'Sistema de Gestion de Equipos',
+  manifest: '/manifest.webmanifest',
   icons: {
-    icon: "/icons/icon-192x192.png",
-    apple: "/icons/icon-192x192.png",
+    icon: '/icons/icon-192x192.png',
+    apple: '/icons/icon-192x192.png',
   },
-  themeColor: "#4c1d95",
+  themeColor: '#4c1d95',
 };
 
 export default function RootLayout({ children }) {
@@ -21,8 +21,10 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#4c1d95" />
       </head>
       <body>
-        {children}
-        <PwaInstallPrompt />
+        <SessionProviderClient>
+          {children}
+          <PwaInstallPrompt />
+        </SessionProviderClient>
       </body>
     </html>
   );

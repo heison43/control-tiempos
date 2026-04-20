@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { CSSProperties } from 'react';
+import PortalMicrosoftGuard from '../../components/PortalMicrosoftGuard';
 
 /**
  * Portal de solicitudes:
@@ -128,6 +129,7 @@ const styles = {
 
 export default function SolicitudesLandingPage() {
   return (
+    <PortalMicrosoftGuard callbackUrl="/solicitudes">
     <main style={styles.page}>
       <div style={styles.container}>
         <div style={styles.card}>
@@ -206,5 +208,6 @@ export default function SolicitudesLandingPage() {
         </div>
       </div>
     </main>
+    </PortalMicrosoftGuard>
   );
 }

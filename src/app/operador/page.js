@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { auth, db } from '../../firebaseConfig'
+import { useSession } from 'next-auth/react'
+import { db } from '../../firebaseConfig'
 import {
   collection,
   doc,
@@ -12,15 +13,11 @@ import {
   updateDoc,
   serverTimestamp,
   arrayUnion,
-  getDoc,
-  getDocs,          // 👈 IMPORT NUEVO
+  getDocs,
 } from 'firebase/firestore'
-import { onAuthStateChanged } from 'firebase/auth'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import OperatorNotificationsManager from '../../components/OperatorNotificationsManager'
-
-
-
+import { ensureAuthorizedUser } from '../../lib/userAccess'
 
 /**
  * WRAPPER: verifica que el usuario logueado tenga rol "operator"
@@ -28,37 +25,54 @@ import OperatorNotificationsManager from '../../components/OperatorNotifications
  */
 export default function OperatorPage() {
   const router = useRouter()
+  const { data: session, status: sessionStatus } = useSession()
   const [loading, setLoading] = useState(true)
   const [operatorId, setOperatorId] = useState(null)
   const [operatorLabel, setOperatorLabel] = useState('')
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let active = true
+
+    async function resolveOperator() {
       try {
-        if (!user) {
-          // No hay sesión -> volver al login
+        if (sessionStatus === 'loading') return
+
+        if (sessionStatus === 'unauthenticated') {
           router.push('/')
           return
         }
 
-        const userRef = doc(db, 'users', user.email)
-        const snap = await getDoc(userRef)
+        const result = await ensureAuthorizedUser({
+          email: session?.user?.email,
+          name: session?.user?.name,
+        })
 
-        if (!snap.exists()) {
-          console.warn('Usuario en auth pero no en colección users')
+        if (!active) return
+
+        if (!result.ok || result.role !== 'operator') {
           router.push('/')
           return
         }
 
-        const data = snap.data()
+        const data = result.meta || {}
 
-        if (data.isActive === false || data.role !== 'operator') {
-          console.warn('Usuario sin rol de operador o inactivo')
-          router.push('/')
-          return
-        }
+        const linkedOperatorId =
+          data.operatorId ||
+          data.operator_id ||
+          null
 
-        if (!data.operatorId) {
+        const linkedOperatorName =
+          data.operatorName ||
+          data.name ||
+          session?.user?.name ||
+          'Operador'
+
+        const linkedOperatorCode =
+          data.operatorCode ||
+          data.code ||
+          ''
+
+        if (!linkedOperatorId) {
           console.warn('Usuario operator sin operatorId configurado')
           setOperatorId(null)
           setOperatorLabel('')
@@ -66,33 +80,28 @@ export default function OperatorPage() {
           return
         }
 
-        setOperatorId(data.operatorId)
+        setOperatorId(linkedOperatorId)
 
-        // Traer nombre/código del operador para mostrarlo en la cabecera
-        try {
-          const opSnap = await getDoc(doc(db, 'operators', data.operatorId))
-          if (opSnap.exists()) {
-            const op = opSnap.data()
-            const label = `${op.name || 'Operador'}${
-              op.codigo ? ` (${op.codigo})` : ''
-            }`
-            setOperatorLabel(label)
-          }
-        } catch (err) {
-          console.error('Error leyendo operador vinculado:', err)
-        }
+        const label = linkedOperatorCode
+          ? `${linkedOperatorName} (${linkedOperatorCode})`
+          : linkedOperatorName
 
+        setOperatorLabel(label)
         setLoading(false)
       } catch (err) {
         console.error('Error verificando permisos de operador:', err)
         router.push('/')
       }
-    })
+    }
 
-    return () => unsubscribe()
-  }, [router])
+    resolveOperator()
 
-  if (loading) {
+    return () => {
+      active = false
+    }
+  }, [router, session, sessionStatus])
+
+  if (loading || sessionStatus === 'loading') {
     return (
       <main
         style={{
@@ -155,11 +164,9 @@ function OperatorPanel({ operatorId, operatorLabel }) {
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('activas')
 
-  const isMobile = useIsMobile()   // 👈 AHORA VIENE DEL HOOK
-
+  const isMobile = useIsMobile()
 
   // -------- helper para sincronizar estado con assignmentRequests -----
-
   async function updateRequestExecutionStatus(assignment, newExecutionStatus) {
     try {
       if (!assignment) {
@@ -183,7 +190,7 @@ function OperatorPanel({ operatorId, operatorLabel }) {
         if (candidateCode) {
           const q = query(
             collection(db, 'assignmentRequests'),
-            where('trackingCode', '==', candidateCode) // 👈 en solicitudes el campo se llama trackingCode
+            where('trackingCode', '==', candidateCode)
           )
           const snap = await getDocs(q)
           if (!snap.empty) {
@@ -205,7 +212,7 @@ function OperatorPanel({ operatorId, operatorLabel }) {
       }
 
       await updateDoc(reqRef, {
-        executionStatus: newExecutionStatus, // 'pending' | 'in_progress' | 'paused' | 'completed'
+        executionStatus: newExecutionStatus,
         updatedAt: serverTimestamp(),
       })
     } catch (err) {
@@ -275,7 +282,7 @@ function OperatorPanel({ operatorId, operatorLabel }) {
       })
 
       const assignment = assignments.find((a) => a.id === id)
-      await updateRequestExecutionStatus(assignment, 'in_progress') // 👈 sincroniza con solicitud
+      await updateRequestExecutionStatus(assignment, 'in_progress')
     } catch {
       setError('No se pudo iniciar la actividad.')
     }
@@ -290,7 +297,7 @@ function OperatorPanel({ operatorId, operatorLabel }) {
       })
 
       const assignment = assignments.find((a) => a.id === id)
-      await updateRequestExecutionStatus(assignment, 'paused') // 👈
+      await updateRequestExecutionStatus(assignment, 'paused')
     } catch {
       setError('No se pudo pausar la actividad.')
     }
@@ -305,7 +312,7 @@ function OperatorPanel({ operatorId, operatorLabel }) {
       })
 
       const assignment = assignments.find((a) => a.id === id)
-      await updateRequestExecutionStatus(assignment, 'in_progress') // 👈
+      await updateRequestExecutionStatus(assignment, 'in_progress')
     } catch {
       setError('No se pudo reanudar la actividad.')
     }
@@ -329,7 +336,7 @@ function OperatorPanel({ operatorId, operatorLabel }) {
         durationMinutes,
       })
 
-      await updateRequestExecutionStatus(assignment, 'completed') // 👈
+      await updateRequestExecutionStatus(assignment, 'completed')
     } catch {
       setError('No se pudo finalizar la actividad.')
     }
@@ -393,462 +400,457 @@ function OperatorPanel({ operatorId, operatorLabel }) {
     return icons[status] || '📝'
   }
 
- // -------- Render --------
-return (
-  <>
-    <style jsx global>{`
-      @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-    `}</style>
+  // -------- Render --------
+  return (
+    <>
+      <style jsx global>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
-    <main style={{ ...styles.page, ...(isMobile ? responsiveStyles.page : {}) }}>
-
-      <div
-        style={{ ...styles.container, ...(isMobile ? responsiveStyles.container : {}) }}
-      >
-        {/* Header Moderno */}
-        <header
-          style={{ ...styles.header, ...(isMobile ? responsiveStyles.header : {}) }}
+      <main style={{ ...styles.page, ...(isMobile ? responsiveStyles.page : {}) }}>
+        <div
+          style={{ ...styles.container, ...(isMobile ? responsiveStyles.container : {}) }}
         >
-          <div>
-            <h1 style={styles.title}>Panel de Operador</h1>
-            <p style={styles.subtitle}>
-              Controla tus actividades, tiempos y registros
-            </p>
-          </div>
-          <div style={{ ...styles.stats, ...(isMobile ? responsiveStyles.stats : {}) }}>
-  <div
-    style={{
-      ...styles.statCard,
-      borderLeftWidth: 3,
-      borderLeftStyle: 'solid',
-      borderLeftColor: '#f59e0b',
-    }}
-  >
-    <span style={styles.statNumber}>{stats.pendientes}</span>
-    <span style={styles.statLabel}>Pendientes</span>
-  </div>
+          {/* Header Moderno */}
+          <header
+            style={{ ...styles.header, ...(isMobile ? responsiveStyles.header : {}) }}
+          >
+            <div>
+              <h1 style={styles.title}>Panel de Operador</h1>
+              <p style={styles.subtitle}>
+                Controla tus actividades, tiempos y registros
+              </p>
+            </div>
 
-  <div
-    style={{
-      ...styles.statCard,
-      borderLeftWidth: 3,
-      borderLeftStyle: 'solid',
-      borderLeftColor: '#10b981',
-    }}
-  >
-    <span style={styles.statNumber}>{stats.enProgreso}</span>
-    <span style={styles.statLabel}>En Progreso</span>
-  </div>
-
-  <div
-    style={{
-      ...styles.statCard,
-      borderLeftWidth: 3,
-      borderLeftStyle: 'solid',
-      borderLeftColor: '#ef4444',
-    }}
-  >
-    <span style={styles.statNumber}>{stats.pausadas}</span>
-    <span style={styles.statLabel}>Pausadas</span>
-  </div>
-
-  <div
-    style={{
-      ...styles.statCard,
-      borderLeftWidth: 3,
-      borderLeftStyle: 'solid',
-      borderLeftColor: '#6b7280',
-    }}
-  >
-    <span style={styles.statNumber}>{stats.finalizadas}</span>
-    <span style={styles.statLabel}>Finalizadas</span>
-  </div>
-</div>
-
-        </header>
-
-        {/* Información del operador logueado (sin desplegable) */}
-        <section
-          style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
-        >
-          <div style={styles.formGroup}>
-            <label style={styles.label}>👤 Operador asignado</label>
-            <div
-              style={{
-                ...styles.select,
-                backgroundColor: '#f9fafb',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'default',
-              }}
-            >
-              <span>{operatorLabel || 'Operador vinculado a tu cuenta'}</span>
-              <span
+            <div style={{ ...styles.stats, ...(isMobile ? responsiveStyles.stats : {}) }}>
+              <div
                 style={{
-                  fontSize: '0.75rem',
-                  color: '#6b7280',
+                  ...styles.statCard,
+                  borderLeftWidth: 3,
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: '#f59e0b',
                 }}
               >
-                Solo lectura
-              </span>
-            </div>
-          </div>
-        </section>
+                <span style={styles.statNumber}>{stats.pendientes}</span>
+                <span style={styles.statLabel}>Pendientes</span>
+              </div>
 
-
-        {/* Gestión de notificaciones push para este operador */}
-<section
-  style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
->
-  <div style={styles.formGroup}>
-    <label style={styles.label}>🔔 Notificaciones</label>
-    <p style={{ fontSize: '0.875rem', color: '#4b5563', marginBottom: '12px' }}>
-      Activa las notificaciones para recibir avisos cuando te asignen una nueva
-      actividad o cambie tu programación.
-    </p>
-
-    <OperatorNotificationsManager operatorId={operatorId} />
-  </div>
-</section>
-
-
-        {/* Tabs de Navegación */}
-        <div
-          style={{ ...styles.tabs, ...(isMobile ? responsiveStyles.tabs : {}) }}
-        >
-          <button
-            onClick={() => setActiveTab('activas')}
-            style={{
-              ...styles.tab,
-              ...(activeTab === 'activas' ? styles.tabActive : {}),
-            }}
-          >
-            🚀 Activas
-          </button>
-          <button
-            onClick={() => setActiveTab('finalizadas')}
-            style={{
-              ...styles.tab,
-              ...(activeTab === 'finalizadas' ? styles.tabActive : {}),
-            }}
-          >
-            ✅ Finalizadas
-          </button>
-          <button
-            onClick={() => setActiveTab('todas')}
-            style={{
-              ...styles.tab,
-              ...(activeTab === 'todas' ? styles.tabActive : {}),
-            }}
-          >
-            📋 Todas
-          </button>
-        </div>
-
-        {/* Contador de actividades */}
-        <div
-          style={{
-            ...styles.counterBar,
-            ...(isMobile ? responsiveStyles.counterBar : {}),
-          }}
-        >
-          <span style={styles.counterText}>
-            {assignments.length} actividad
-            {assignments.length !== 1 ? 'es' : ''}{' '}
-            {activeTab === 'activas'
-              ? 'activas'
-              : activeTab === 'finalizadas'
-              ? 'finalizadas'
-              : 'en total'}
-          </span>
-        </div>
-
-        {/* Contenido de Asignaciones */}
-        <section
-          style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
-        >
-          {error && <div style={styles.error}>⚠️ {error}</div>}
-
-          {loading ? (
-            <div style={styles.loading}>
-              <div style={styles.spinner}></div>
-              <p>Cargando actividades...</p>
-            </div>
-          ) : assignments.length === 0 ? (
-            <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>📝</div>
-              <h3>
-                No hay actividades{' '}
-                {activeTab === 'activas'
-                  ? 'activas'
-                  : activeTab === 'finalizadas'
-                  ? 'finalizadas'
-                  : ''}
-              </h3>
-              <p>Cuando tengas nuevas asignaciones, aparecerán aquí.</p>
-            </div>
-          ) : (
-            <div
-              style={{
-                ...styles.assignmentsGrid,
-                ...(isMobile ? responsiveStyles.assignmentsGrid : {}),
-              }}
-            >
-              {assignments.map((assignment) => (
-  <div
-    key={assignment.id}
-    style={{
-      ...styles.assignmentCard,
-      borderLeftColor: getStatusColor(assignment.status),
-    }}
-  >
-
-
-                  <div
-                    style={{
-                      ...styles.assignmentHeader,
-                      ...(isMobile ? responsiveStyles.assignmentHeader : {}),
-                    }}
-                  >
-                    <div style={styles.assignmentInfo}>
-                      <h3 style={styles.activityTitle}>{assignment.activity}</h3>
-                      <p style={styles.location}>📍 {assignment.location}</p>
-                      {assignment.solicitadoPor && (
-                        <p style={styles.solicitadoPor}>
-                          👥 Solicitado por:{' '}
-                          <strong>{assignment.solicitadoPor}</strong>
-                        </p>
-                      )}
-
-                      {assignment.telefonoSolicitante && (
-                        <p style={styles.solicitadoPor}>
-                          📞 Teléfono:{' '}
-                          <strong>{assignment.telefonoSolicitante}</strong>
-                        </p>
-                      )}
-
-                      {assignment.areaSolicitante && (
-                        <p style={styles.solicitadoPor}>
-                          🏢 Área solicitante:{' '}
-                          <strong>{assignment.areaSolicitante}</strong>
-                        </p>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        ...styles.statusBadge,
-                        backgroundColor: `${getStatusColor(
-                          assignment.status
-                        )}20`,
-                        color: getStatusColor(assignment.status),
-                      }}
-                    >
-                      {getStatusIcon(assignment.status)}{' '}
-                      {assignment.status.replace('_', ' ')}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      ...styles.timeInfo,
-                      ...(isMobile ? responsiveStyles.timeInfo : {}),
-                    }}
-                  >
-                    <div style={styles.timeItem}>
-                      <span style={styles.timeLabel}>Inicio:</span>
-                      <span style={styles.timeValue}>
-                        {formatTime(assignment.startTime)}
-                      </span>
-                    </div>
-                    <div style={styles.timeItem}>
-                      <span style={styles.timeLabel}>Fin:</span>
-                      <span style={styles.timeValue}>
-                        {formatTime(assignment.endTime)}
-                      </span>
-                    </div>
-                    {assignment.durationMinutes && (
-                      <div style={styles.timeItem}>
-                        <span style={styles.timeLabel}>Duración:</span>
-                        <span style={styles.timeValue}>
-                          {assignment.durationMinutes} min
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Acciones */}
-                  <div
-                    style={{
-                      ...styles.actions,
-                      ...(isMobile ? responsiveStyles.actions : {}),
-                    }}
-                  >
-                    {assignment.status === 'pendiente' && (
-                      <button
-                        onClick={() => handleStart(assignment.id)}
-                        style={styles.btnPrimary}
-                      >
-                        ▶️ Iniciar
-                      </button>
-                    )}
-
-                    {assignment.status === 'en_progreso' && (
-                      <>
-                        <button
-                          onClick={() => handlePause(assignment.id)}
-                          style={styles.btnSecondary}
-                        >
-                          ⏸️ Pausar
-                        </button>
-                        <button
-                          onClick={() => handleFinish(assignment)}
-                          style={styles.btnSuccess}
-                        >
-                          ✅ Finalizar
-                        </button>
-                      </>
-                    )}
-
-                    {assignment.status === 'pausado' && (
-                      <>
-                        <button
-                          onClick={() => handleResume(assignment.id)}
-                          style={styles.btnPrimary}
-                        >
-                          ▶️ Reanudar
-                        </button>
-                        <button
-                          onClick={() => handleFinish(assignment)}
-                          style={styles.btnSuccess}
-                        >
-                          ✅ Finalizar
-                        </button>
-                      </>
-                    )}
-
-                    {assignment.status !== 'finalizado' && (
-                      <button
-                        onClick={() => openNoteModal(assignment)}
-                        style={styles.btnOutline}
-                      >
-                        📝 Nota
-                      </button>
-                    )}
-
-                    {assignment.status === 'finalizado' && (
-                      <div style={styles.completedBadge}>
-                        ✅ Completado • {assignment.durationMinutes || '0'} min
-                      </div>
-                    )}
-                  </div>
-
-                  {assignment.evidences &&
-                    assignment.evidences.filter((ev) => ev.type === 'text')
-                      .length > 0 && (
-                      <div style={styles.notesSection}>
-                        <h4 style={styles.notesTitle}>Notas:</h4>
-                        {assignment.evidences
-                          .filter((ev) => ev.type === 'text')
-                          .map((ev, index) => (
-                            <div key={index} style={styles.noteItem}>
-                              <p style={styles.noteText}>{ev.content}</p>
-                              <span style={styles.noteTime}>
-                                {ev.createdAt?.toDate
-                                  ? formatTime(ev.createdAt)
-                                  : 'Ahora'}
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-
-      {/* Modal Notas Moderno */}
-      {showNoteModal && (
-        <div style={styles.modalBackdrop}>
-          <div style={styles.modal}>
-            <div style={styles.modalHeader}>
-              <h3>📝 Agregar Nota</h3>
-              <button
-                onClick={() => setShowNoteModal(false)}
-                style={styles.closeButton}
+              <div
+                style={{
+                  ...styles.statCard,
+                  borderLeftWidth: 3,
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: '#10b981',
+                }}
               >
-                ×
-              </button>
+                <span style={styles.statNumber}>{stats.enProgreso}</span>
+                <span style={styles.statLabel}>En Progreso</span>
+              </div>
+
+              <div
+                style={{
+                  ...styles.statCard,
+                  borderLeftWidth: 3,
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: '#ef4444',
+                }}
+              >
+                <span style={styles.statNumber}>{stats.pausadas}</span>
+                <span style={styles.statLabel}>Pausadas</span>
+              </div>
+
+              <div
+                style={{
+                  ...styles.statCard,
+                  borderLeftWidth: 3,
+                  borderLeftStyle: 'solid',
+                  borderLeftColor: '#6b7280',
+                }}
+              >
+                <span style={styles.statNumber}>{stats.finalizadas}</span>
+                <span style={styles.statLabel}>Finalizadas</span>
+              </div>
             </div>
+          </header>
 
-            <div style={styles.modalBody}>
-              <p style={styles.modalAssignment}>
-                Actividad: <strong>{selectedAssignment?.activity}</strong>
-              </p>
-
-              {selectedAssignment?.solicitadoPor && (
-                <p style={styles.modalSolicitado}>
-                  👥 Solicitado por:{' '}
-                  <strong>{selectedAssignment.solicitadoPor}</strong>
-                </p>
-              )}
-
-              {selectedAssignment?.telefonoSolicitante && (
-                <p style={styles.modalSolicitado}>
-                  📞 Teléfono:{' '}
-                  <strong>{selectedAssignment.telefonoSolicitante}</strong>
-                </p>
-              )}
-
-              {selectedAssignment?.areaSolicitante && (
-                <p style={styles.modalSolicitado}>
-                  🏢 Área:{' '}
-                  <strong>{selectedAssignment.areaSolicitante}</strong>
-                </p>
-              )}
-
-              <textarea
-                placeholder="Escribe tus observaciones, comentarios o detalles importantes..."
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                style={styles.textarea}
-                rows={4}
-              />
-
-              <div style={styles.modalActions}>
-                <button
-                  onClick={() => setShowNoteModal(false)}
-                  style={styles.btnCancel}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveNote}
-                  disabled={saving || !noteText.trim()}
+          {/* Información del operador logueado */}
+          <section
+            style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
+          >
+            <div style={styles.formGroup}>
+              <label style={styles.label}>👤 Operador asignado</label>
+              <div
+                style={{
+                  ...styles.select,
+                  backgroundColor: '#f9fafb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'default',
+                }}
+              >
+                <span>{operatorLabel || 'Operador vinculado a tu cuenta'}</span>
+                <span
                   style={{
-                    ...styles.btnSave,
-                    ...((saving || !noteText.trim()) && styles.btnDisabled),
+                    fontSize: '0.75rem',
+                    color: '#6b7280',
                   }}
                 >
-                  {saving ? '💾 Guardando...' : '💾 Guardar Nota'}
+                  Solo lectura
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* Gestión de notificaciones push para este operador */}
+          <section
+            style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
+          >
+            <div style={styles.formGroup}>
+              <label style={styles.label}>🔔 Notificaciones</label>
+              <p style={{ fontSize: '0.875rem', color: '#4b5563', marginBottom: '12px' }}>
+                Activa las notificaciones para recibir avisos cuando te asignen una nueva
+                actividad o cambie tu programación.
+              </p>
+
+              <OperatorNotificationsManager operatorId={operatorId} />
+            </div>
+          </section>
+
+          {/* Tabs de Navegación */}
+          <div
+            style={{ ...styles.tabs, ...(isMobile ? responsiveStyles.tabs : {}) }}
+          >
+            <button
+              onClick={() => setActiveTab('activas')}
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'activas' ? styles.tabActive : {}),
+              }}
+            >
+              🚀 Activas
+            </button>
+            <button
+              onClick={() => setActiveTab('finalizadas')}
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'finalizadas' ? styles.tabActive : {}),
+              }}
+            >
+              ✅ Finalizadas
+            </button>
+            <button
+              onClick={() => setActiveTab('todas')}
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'todas' ? styles.tabActive : {}),
+              }}
+            >
+              📋 Todas
+            </button>
+          </div>
+
+          {/* Contador de actividades */}
+          <div
+            style={{
+              ...styles.counterBar,
+              ...(isMobile ? responsiveStyles.counterBar : {}),
+            }}
+          >
+            <span style={styles.counterText}>
+              {assignments.length} actividad
+              {assignments.length !== 1 ? 'es' : ''}{' '}
+              {activeTab === 'activas'
+                ? 'activas'
+                : activeTab === 'finalizadas'
+                ? 'finalizadas'
+                : 'en total'}
+            </span>
+          </div>
+
+          {/* Contenido de Asignaciones */}
+          <section
+            style={{ ...styles.card, ...(isMobile ? responsiveStyles.card : {}) }}
+          >
+            {error && <div style={styles.error}>⚠️ {error}</div>}
+
+            {loading ? (
+              <div style={styles.loading}>
+                <div style={styles.spinner}></div>
+                <p>Cargando actividades...</p>
+              </div>
+            ) : assignments.length === 0 ? (
+              <div style={styles.emptyState}>
+                <div style={styles.emptyIcon}>📝</div>
+                <h3>
+                  No hay actividades{' '}
+                  {activeTab === 'activas'
+                    ? 'activas'
+                    : activeTab === 'finalizadas'
+                    ? 'finalizadas'
+                    : ''}
+                </h3>
+                <p>Cuando tengas nuevas asignaciones, aparecerán aquí.</p>
+              </div>
+            ) : (
+              <div
+                style={{
+                  ...styles.assignmentsGrid,
+                  ...(isMobile ? responsiveStyles.assignmentsGrid : {}),
+                }}
+              >
+                {assignments.map((assignment) => (
+                  <div
+                    key={assignment.id}
+                    style={{
+                      ...styles.assignmentCard,
+                      borderLeftColor: getStatusColor(assignment.status),
+                    }}
+                  >
+                    <div
+                      style={{
+                        ...styles.assignmentHeader,
+                        ...(isMobile ? responsiveStyles.assignmentHeader : {}),
+                      }}
+                    >
+                      <div style={styles.assignmentInfo}>
+                        <h3 style={styles.activityTitle}>{assignment.activity}</h3>
+                        <p style={styles.location}>📍 {assignment.location}</p>
+
+                        {assignment.solicitadoPor && (
+                          <p style={styles.solicitadoPor}>
+                            👥 Solicitado por:{' '}
+                            <strong>{assignment.solicitadoPor}</strong>
+                          </p>
+                        )}
+
+                        {assignment.telefonoSolicitante && (
+                          <p style={styles.solicitadoPor}>
+                            📞 Teléfono:{' '}
+                            <strong>{assignment.telefonoSolicitante}</strong>
+                          </p>
+                        )}
+
+                        {assignment.areaSolicitante && (
+                          <p style={styles.solicitadoPor}>
+                            🏢 Área solicitante:{' '}
+                            <strong>{assignment.areaSolicitante}</strong>
+                          </p>
+                        )}
+                      </div>
+
+                      <div
+                        style={{
+                          ...styles.statusBadge,
+                          backgroundColor: `${getStatusColor(assignment.status)}20`,
+                          color: getStatusColor(assignment.status),
+                        }}
+                      >
+                        {getStatusIcon(assignment.status)}{' '}
+                        {assignment.status.replace('_', ' ')}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        ...styles.timeInfo,
+                        ...(isMobile ? responsiveStyles.timeInfo : {}),
+                      }}
+                    >
+                      <div style={styles.timeItem}>
+                        <span style={styles.timeLabel}>Inicio:</span>
+                        <span style={styles.timeValue}>
+                          {formatTime(assignment.startTime)}
+                        </span>
+                      </div>
+
+                      <div style={styles.timeItem}>
+                        <span style={styles.timeLabel}>Fin:</span>
+                        <span style={styles.timeValue}>
+                          {formatTime(assignment.endTime)}
+                        </span>
+                      </div>
+
+                      {assignment.durationMinutes && (
+                        <div style={styles.timeItem}>
+                          <span style={styles.timeLabel}>Duración:</span>
+                          <span style={styles.timeValue}>
+                            {assignment.durationMinutes} min
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Acciones */}
+                    <div
+                      style={{
+                        ...styles.actions,
+                        ...(isMobile ? responsiveStyles.actions : {}),
+                      }}
+                    >
+                      {assignment.status === 'pendiente' && (
+                        <button
+                          onClick={() => handleStart(assignment.id)}
+                          style={styles.btnPrimary}
+                        >
+                          ▶️ Iniciar
+                        </button>
+                      )}
+
+                      {assignment.status === 'en_progreso' && (
+                        <>
+                          <button
+                            onClick={() => handlePause(assignment.id)}
+                            style={styles.btnSecondary}
+                          >
+                            ⏸️ Pausar
+                          </button>
+                          <button
+                            onClick={() => handleFinish(assignment)}
+                            style={styles.btnSuccess}
+                          >
+                            ✅ Finalizar
+                          </button>
+                        </>
+                      )}
+
+                      {assignment.status === 'pausado' && (
+                        <>
+                          <button
+                            onClick={() => handleResume(assignment.id)}
+                            style={styles.btnPrimary}
+                          >
+                            ▶️ Reanudar
+                          </button>
+                          <button
+                            onClick={() => handleFinish(assignment)}
+                            style={styles.btnSuccess}
+                          >
+                            ✅ Finalizar
+                          </button>
+                        </>
+                      )}
+
+                      {assignment.status !== 'finalizado' && (
+                        <button
+                          onClick={() => openNoteModal(assignment)}
+                          style={styles.btnOutline}
+                        >
+                          📝 Nota
+                        </button>
+                      )}
+
+                      {assignment.status === 'finalizado' && (
+                        <div style={styles.completedBadge}>
+                          ✅ Completado • {assignment.durationMinutes || '0'} min
+                        </div>
+                      )}
+                    </div>
+
+                    {assignment.evidences &&
+                      assignment.evidences.filter((ev) => ev.type === 'text').length > 0 && (
+                        <div style={styles.notesSection}>
+                          <h4 style={styles.notesTitle}>Notas:</h4>
+                          {assignment.evidences
+                            .filter((ev) => ev.type === 'text')
+                            .map((ev, index) => (
+                              <div key={index} style={styles.noteItem}>
+                                <p style={styles.noteText}>{ev.content}</p>
+                                <span style={styles.noteTime}>
+                                  {ev.createdAt?.toDate
+                                    ? formatTime(ev.createdAt)
+                                    : 'Ahora'}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* Modal Notas Moderno */}
+        {showNoteModal && (
+          <div style={styles.modalBackdrop}>
+            <div style={styles.modal}>
+              <div style={styles.modalHeader}>
+                <h3>📝 Agregar Nota</h3>
+                <button
+                  onClick={() => setShowNoteModal(false)}
+                  style={styles.closeButton}
+                >
+                  ×
                 </button>
+              </div>
+
+              <div style={styles.modalBody}>
+                <p style={styles.modalAssignment}>
+                  Actividad: <strong>{selectedAssignment?.activity}</strong>
+                </p>
+
+                {selectedAssignment?.solicitadoPor && (
+                  <p style={styles.modalSolicitado}>
+                    👥 Solicitado por:{' '}
+                    <strong>{selectedAssignment.solicitadoPor}</strong>
+                  </p>
+                )}
+
+                {selectedAssignment?.telefonoSolicitante && (
+                  <p style={styles.modalSolicitado}>
+                    📞 Teléfono:{' '}
+                    <strong>{selectedAssignment.telefonoSolicitante}</strong>
+                  </p>
+                )}
+
+                {selectedAssignment?.areaSolicitante && (
+                  <p style={styles.modalSolicitado}>
+                    🏢 Área:{' '}
+                    <strong>{selectedAssignment.areaSolicitante}</strong>
+                  </p>
+                )}
+
+                <textarea
+                  placeholder="Escribe tus observaciones, comentarios o detalles importantes..."
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  style={styles.textarea}
+                  rows={4}
+                />
+
+                <div style={styles.modalActions}>
+                  <button
+                    onClick={() => setShowNoteModal(false)}
+                    style={styles.btnCancel}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSaveNote}
+                    disabled={saving || !noteText.trim()}
+                    style={{
+                      ...styles.btnSave,
+                      ...((saving || !noteText.trim()) && styles.btnDisabled),
+                    }}
+                  >
+                    {saving ? '💾 Guardando...' : '💾 Guardar Nota'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-        </main>
-  </>
-)
-
+        )}
+      </main>
+    </>
+  )
 }
 
-/* -------- Estilos ULTRA PRO (solo UI) -------- */
+/* -------- Estilos -------- */
 const styles = {
   page: {
     minHeight: '100vh',
@@ -896,7 +898,6 @@ const styles = {
     flexWrap: 'wrap',
   },
 
-  // ✅ sin shorthand border (quita warning)
   statCard: {
     background: 'rgba(255,255,255,0.14)',
     backdropFilter: 'blur(14px)',
@@ -904,15 +905,12 @@ const styles = {
     borderRadius: '16px',
     textAlign: 'center',
     minWidth: '104px',
-
     borderWidth: 1,
     borderStyle: 'solid',
     borderColor: 'rgba(255,255,255,0.22)',
-
     borderLeftWidth: 5,
     borderLeftStyle: 'solid',
     borderLeftColor: 'rgba(255,255,255,0.22)',
-
     boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
   },
 
@@ -961,11 +959,9 @@ const styles = {
     fontSize: '0.98rem',
     backgroundColor: 'rgba(255,255,255,0.9)',
     transition: 'all 0.2s ease',
-
     borderWidth: 1,
     borderStyle: 'solid',
     borderColor: 'rgba(15,23,42,0.12)',
-
     boxShadow: '0 6px 20px rgba(15,23,42,0.06)',
   },
 
@@ -1073,8 +1069,6 @@ const styles = {
     gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
   },
 
-  // ✅ TARJETA DE ACTIVIDAD (más pro)
-  // ✅ sin shorthand border (para que si luego pintas borde izq no moleste)
   assignmentCard: {
     position: 'relative',
     overflow: 'hidden',
@@ -1083,19 +1077,15 @@ const styles = {
     borderRadius: '20px',
     padding: '18px',
     transition: 'all 0.25s ease',
-
     borderWidth: 1,
     borderStyle: 'solid',
     borderColor: 'rgba(15,23,42,0.10)',
-
     borderLeftWidth: 6,
     borderLeftStyle: 'solid',
     borderLeftColor: 'rgba(15,23,42,0.10)',
-
     boxShadow: '0 14px 40px rgba(15,23,42,0.10)',
   },
 
-  // franja superior elegante
   assignmentAccent: {
     position: 'absolute',
     top: 0,
@@ -1394,11 +1384,9 @@ const styles = {
     fontFamily: 'inherit',
     transition: 'border-color 0.2s ease',
     outline: 'none',
-
     borderWidth: 1,
     borderStyle: 'solid',
     borderColor: 'rgba(15,23,42,0.14)',
-
     boxShadow: '0 10px 24px rgba(15,23,42,0.08)',
     background: 'rgba(255,255,255,0.9)',
   },
