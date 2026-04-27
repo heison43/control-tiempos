@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model users {
+  id          String   @id
+  email       String   @unique
+  name        String
+  role        String
+  is_active   Boolean  @default(true)
+  operator_id String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  metadata    Json?
+
+  operator operators? @relation(fields: [operator_id], references: [id])
+
+  @@index([email])
+  @@index([role])
+}
+
+model admins {
+  email      String   @id
+  is_active  Boolean  @default(true)
+  role       String   @default("admin")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  metadata   Json?
+}
+
+model operators {
+  id          String   @id
+  code        String?  @unique
+  name        String
+  auth_email  String?  @unique
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  metadata    Json?
+
+  users              users[]
+  assignments        assignments[]
+  weekly_assignments weekly_assignments[]
+
+  @@index([auth_email])
+}
+
+model equipment {
+  id          String   @id
+  code        String?  @unique
+  name        String
+  status      String   @default("active")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  metadata    Json?
+
+  assignments        assignments[]
+  weekly_assignments weekly_assignments[]
+  equipment_loans    equipment_loans[]
+}
+
+model assignment_requests {
+  id              String      @id
+  tracking_code   String?     @unique
+  requester_name  String
+  requester_id    String?
+  requester_email String?
+  contact_phone   String?
+  area            String?
+  cost_center     String?
+  location        String?
+  activity        String
+  status          String      @default("created")
+  admin_message   String?
+  response_message String?
+  processed_at    DateTime?
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+  metadata        Json?
+
+  assignments assignments[]
+
+  @@index([tracking_code])
+}
+
+model assignments {
+  id               String   @id
+  request_id       String?
+  operator_id      String
+  equipment_id     String?
+  requested_by     String?
+  requested_by_id  String?
+  status           String   @default("pending")
+  location         String?
+  activity         String
+  start_time       DateTime?
+  end_time         DateTime?
+  duration_minutes Int?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+  metadata         Json?
+
+  request    assignment_requests? @relation(fields: [request_id], references: [id])
+  operator   operators            @relation(fields: [operator_id], references: [id])
+  equipment  equipment?           @relation(fields: [equipment_id], references: [id])
+
+  evidences assignment_evidences[]
+
+  @@index([operator_id])
+  @@index([equipment_id])
+  @@index([request_id])
+}
+
+model assignment_evidences {
+  id            BigInt   @id @default(autoincrement())
+  assignment_id String
+  type          String
+  content       String?
+  file_url      String?
+  created_at    DateTime @default(now())
+
+  assignment assignments @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+
+  @@index([assignment_id])
+}
+
+model weekly_assignments {
+  id          String   @id
+  operator_id String
+  equipment_id String
+  shift       String?
+  start_date  DateTime
+  end_date    DateTime
+  status      String   @default("active")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  metadata    Json?
+
+  operator  operators @relation(fields: [operator_id], references: [id])
+  equipment equipment @relation(fields: [equipment_id], references: [id])
+
+  @@index([operator_id])
+  @@index([equipment_id])
+}
+
+model equipment_loans {
+  id              String   @id
+  requester_name  String
+  requester_email String?
+  equipment_id    String
+  reason          String?
+  status          String   @default("requested")
+  loan_date       DateTime?
+  return_date     DateTime?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+  metadata        Json?
+
+  equipment equipment @relation(fields: [equipment_id], references: [id])
+
+  @@index([equipment_id])
+}
+
+model admin_push_tokens {
+  id         String   @id
+  token      String?
+  email      String?
+  user_id    String?
+  metadata   Json?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([email])
+}
+
+model operator_push_tokens {
+  id          String   @id
+  token       String?
+  operator_id String?
+  email       String?
+  metadata    Json?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([operator_id])
+  @@index([email])
+}
+
+model portal_users {
+  id         String   @id
+  email      String?
+  user_id    String?
+  metadata   Json?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([email])
+}
+
+model notifications {
+  id             String   @id
+  user_email     String?
+  role           String?
+  title          String
+  message        String
+  type           String?
+  related_id     String?
+  related_module String?
+  is_read        Boolean  @default(false)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([user_email])
+  @@index([role])
+  @@index([is_read])
+  @@index([created_at])
+}
